@@ -47,6 +47,14 @@ cleanup() {
   log "Cleanup: unmount"
   timeout 15 umount "${MOUNT_DIR}" >/dev/null 2>&1 || true
 
+  if [[ -n "${FC_DEV:-}" && -b "${FC_DEV}" ]]; then
+    log "Cleanup: deleting FC SCSI device ${FC_DEV}"
+    timeout 10 blockdev --flushbufs "${FC_DEV}" >/dev/null 2>&1 || true
+    timeout 10 udevadm settle >/dev/null 2>&1 || true
+    echo 1 > "/sys/block/$(basename "${FC_DEV}")/device/delete" 2>/dev/null || true
+    timeout 10 udevadm settle >/dev/null 2>&1 || true
+  fi
+
   if [[ -f "${FC_OSBRICK_CONN_FILE}" ]]; then
     log "Cleanup: os-brick FC disconnect"
     timeout 30 "${VENV_DIR}/bin/python" - <<'PY' >/dev/null 2>&1 || true

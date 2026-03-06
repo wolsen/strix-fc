@@ -46,6 +46,15 @@ cleanup() {
   set +e
   log "Cleanup: unmount"
   timeout 15 umount "${MOUNT_DIR}" >/dev/null 2>&1 || true
+
+  if [[ -n "${FC_DEV:-}" && -b "${FC_DEV}" ]]; then
+    log "Cleanup: deleting FC SCSI device ${FC_DEV}"
+    timeout 10 blockdev --flushbufs "${FC_DEV}" >/dev/null 2>&1 || true
+    timeout 10 udevadm settle >/dev/null 2>&1 || true
+    echo 1 > "/sys/block/$(basename "${FC_DEV}")/device/delete" 2>/dev/null || true
+    timeout 10 udevadm settle >/dev/null 2>&1 || true
+  fi
+
   if [[ -x "${APOLLO_FCCTL}" ]]; then
     log "Cleanup: unmap/delete rport"
     timeout 15 fcctl unmap-lun --host "${HOST_ID:-0}" --target-wwpn "${FC_TARGET_WWPN}" --lun "${FC_LUN_ID}" >/dev/null 2>&1 || true
