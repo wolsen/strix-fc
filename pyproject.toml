@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apollo-fc"
+version = "0.1.0"
+description = "Apollo Fake Fibre Channel control utility"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7.0",
+  "pyroute2>=0.7.12",
+  "PyYAML>=6.0.1",
+]
+
+[project.scripts]
+apollo-fcctl = "apollo_fcctl.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "userspace"}
+
+[tool.setuptools.packages.find]
+where = ["userspace"]
