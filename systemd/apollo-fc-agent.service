@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Canonical, Ltd.
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# systemd service unit for the Apollo FC Agent.
+#
+# The agent polls the Apollo Gateway for attachment state and reconciles
+# the local apollo_fc kernel module + iSCSI sessions accordingly.
+#
+# Install:
+#   cp systemd/apollo-fc-agent.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now apollo-fc-agent
+#
+# Configuration is via environment variables.  Drop an override into
+# /etc/systemd/system/apollo-fc-agent.service.d/override.conf or use
+# an EnvironmentFile.
+
+[Unit]
+Description=Apollo FC Agent — gateway-driven FC+iSCSI reconciliation
+Documentation=https://github.com/lunacy-systems/apollo-fc
+After=network-online.target iscsid.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/apollo-fc-agent run
+Restart=on-failure
+RestartSec=5
+
+# Required env vars — set via EnvironmentFile or systemd drop-in
+EnvironmentFile=-/etc/default/apollo-fc-agent
+
+# Hardening
+NoNewPrivileges=false
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
