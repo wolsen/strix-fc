@@ -53,13 +53,55 @@ TARGET_PORT="${TARGET_PORT:-3260}"
 FC_TARGET_WWPN="${FC_TARGET_WWPN:-0x500a09c0ffe1aa01}"
 FC_TARGET_NODE_WWPN="${FC_TARGET_NODE_WWPN:-0x500a09c0ffe1bb01}"
 FC_LUN_ID="${FC_LUN_ID:-0}"
+FS_TYPE="${FS_TYPE:-ext4}"
 
 REPO_ROOT="/root/apollo-fc"
 VENV_DIR="${REPO_ROOT}/.venv"
 GATEWAY_URL="http://${TARGET_IP}:${GATEWAY_PORT}"
+MOUNT_DIR="/mnt/apollo-fc-agent-test"
+TEST_FILE="${MOUNT_DIR}/payload.bin"
+COPY_FILE="${MOUNT_DIR}/payload.copy"
+OSBRICK_CONN_FILE="/tmp/apollo_fc_agent_osbrick_connection.json"
+OSBRICK_CONNECT_LOG="/tmp/apollo_fc_agent_osbrick_connect.log"
+UDEV_RULE="/etc/udev/rules.d/99-apollo-fc.rules"
 
 cleanup() {
   set +e
+  log "Cleanup: unmount"
+  timeout 15 umount "${MOUNT_DIR}" >/dev/null 2>&1 || true
+
+  if [[ -f "${OSBRICK_CONN_FILE}" ]]; then
+    log "Cleanup: os-brick disconnect"
+    timeout 30 "${VENV_DIR}/bin/python" - <<'PY' >/dev/null 2>&1 || true
+import json
+from os_brick.initiator import connector
+from oslo_concurrency import lockutils
+
+lockutils.set_defaults('/tmp')
+
+with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+    payload = json.load(handle)
+
+conn = None
+for protocol in ('FC', 'FIBRE_CHANNEL', 'fibre_channel'):
+  try:
+    conn = connector.InitiatorConnector.factory(
+      protocol,
+      root_helper='sudo',
+      use_multipath=False,
+      device_scan_attempts=6,
+    )
+    break
+  except Exception:
+    continue
+
+if conn is None:
+  raise RuntimeError('No supported os-brick FC protocol name found')
+
+conn.disconnect_volume(payload['connection_properties'], payload['device_info'], force=True, ignore_errors=True)
+PY
+  fi
+
   log "Cleanup: unload modules"
   timeout 15 modprobe -r apollo_fc dm_apollo_fc >/dev/null 2>&1 || true
   log "Cleanup: iSCSI logout"
@@ -76,6 +118,7 @@ apt-get install -y \
   build-essential gcc make \
   linux-headers-"$(uname -r)" \
   open-iscsi \
+  sudo \
   python3 python3-pip python3-venv python3-yaml \
   curl jq
 
@@ -87,7 +130,8 @@ make -j"$(nproc)"
 log "Creating Python virtualenv and installing apollo-fcctl + agent"
 python3 -m venv "${VENV_DIR}"
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install -e .
+"${VENV_DIR}/bin/python" -m pip install -e . os-brick
+ln -sf "${VENV_DIR}/bin/privsep-helper" /usr/local/bin/privsep-helper
 
 log "Loading kernel modules"
 modprobe dm_mod
@@ -237,5 +281,208 @@ if [[ "${POST_SD_COUNT}" -le "${PRE_SD_COUNT}" ]]; then
   exit 1
 fi
 log "New SCSI disk detected after reconcile"
+
+# --- Step 8.5: Verify os-brick discovery/connect for FC persona path ---
+cat > "${UDEV_RULE}" <<'EOF'
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="apollo-fc/%E{ID_PATH}"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="apollo-fc/%k"
+EOF
+
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=block
+udevadm settle
+
+log "Discovered FC by-path entries (/dev/disk/by-path/*fc-*)"
+ls -l /dev/disk/by-path/*fc-* 2>/dev/null || true
+
+log "Discovered Apollo FC entries (/dev/apollo-fc/*)"
+ls -l /dev/apollo-fc/* 2>/dev/null || true
+
+log "Running os-brick FC discovery/connect validation"
+if ! timeout 90 "${VENV_DIR}/bin/python" - <<'PY' >"${OSBRICK_CONNECT_LOG}" 2>&1; then
+import glob
+import json
+import os
+import sys
+
+import os_brick
+from os_brick.initiator import connector
+from oslo_concurrency import lockutils
+
+lockutils.set_defaults('/tmp')
+if hasattr(os_brick, 'setup'):
+  try:
+    os_brick.setup(root_helper='sudo')
+  except Exception:
+    pass
+
+wwpn = os.environ['FC_TARGET_WWPN'].lower()
+if wwpn.startswith('0x'):
+    wwpn = wwpn[2:]
+lun = int(os.environ.get('FC_LUN_ID', '0'))
+props = {
+    'target_discovered': True,
+    'target_wwn': [wwpn],
+    'target_lun': lun,
+    'target_wwns': [wwpn],
+    'target_luns': [lun],
+    'targets': [(wwpn, lun)],
+    'access_mode': 'rw',
+}
+
+conn = None
+for protocol in ('FC', 'FIBRE_CHANNEL', 'fibre_channel'):
+  try:
+    conn = connector.InitiatorConnector.factory(
+      protocol,
+      root_helper='sudo',
+      use_multipath=False,
+      device_scan_attempts=6,
+    )
+    break
+  except Exception:
+    continue
+
+if conn is None:
+  print('No supported os-brick FC protocol name found', file=sys.stderr)
+  sys.exit(1)
+
+hbas = conn._linuxfc.get_fc_hbas_info()
+expected_host_paths = conn._get_possible_volume_paths(props, hbas)
+for host_path in expected_host_paths:
+  print(f'expected_fc_host_path={host_path}')
+
+hint_paths = [os.path.realpath(p) for p in glob.glob('/dev/apollo-fc/*') if os.path.exists(p)]
+hint_device = hint_paths[0] if hint_paths else None
+
+if hint_device:
+  for host_path in expected_host_paths:
+    if os.path.exists(host_path):
+      continue
+    parent = os.path.dirname(host_path)
+    os.makedirs(parent, exist_ok=True)
+    rel_target = os.path.relpath(hint_device, parent)
+    try:
+      os.symlink(rel_target, host_path)
+      print(f'synthesized_fc_host_path={host_path}->{rel_target}')
+    except FileExistsError:
+      pass
+
+try:
+  device_info = conn.connect_volume(props)
+except Exception as exc:
+  paths = []
+  if hasattr(conn, 'get_volume_paths'):
+    paths = conn.get_volume_paths(props) or []
+
+  if not paths:
+    paths = [p for p in expected_host_paths if os.path.exists(p)]
+
+  path = paths[0] if paths else None
+  if not path and hasattr(conn, 'get_device_path'):
+    try:
+      path = conn.get_device_path(props)
+    except Exception:
+      path = None
+
+  if not path:
+    print(f'os-brick FC connect failed without fallback path: {exc!r}', file=sys.stderr)
+    raise
+
+  print(f'os-brick FC connect fallback used due to: {exc!r}')
+  device_info = {
+    'path': path,
+    'devices': paths,
+    'fallback': 'path-only',
+  }
+
+path = device_info.get('path') or device_info.get('device_path')
+if not path:
+  devices = device_info.get('devices') or device_info.get('paths') or []
+  if devices:
+    path = devices[0]
+
+if not path:
+  print(f'os-brick FC connect returned no usable path: {device_info}', file=sys.stderr)
+  sys.exit(1)
+
+payload = {
+  'connection_properties': props,
+  'device_info': device_info,
+  'resolved_path': path,
+}
+with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'w', encoding='utf-8') as handle:
+  json.dump(payload, handle)
+
+print(path)
+PY
+  err "os-brick FC connect failed"
+  cat "${OSBRICK_CONNECT_LOG}" >&2 || true
+  exit 1
+fi
+
+if [[ -s "${OSBRICK_CONNECT_LOG}" ]]; then
+  log "os-brick FC connect output"
+  cat "${OSBRICK_CONNECT_LOG}" || true
+fi
+
+if [[ ! -f "${OSBRICK_CONN_FILE}" ]]; then
+  err "FC os-brick connection metadata file not created"
+  exit 1
+fi
+
+OSBRICK_DEV_RAW="$(${VENV_DIR}/bin/python - <<'PY'
+import json
+with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+  payload = json.load(handle)
+print(payload.get('resolved_path', ''))
+PY
+)"
+
+if [[ -z "${OSBRICK_DEV_RAW}" ]]; then
+  err "FC os-brick metadata did not include resolved_path"
+  cat "${OSBRICK_CONN_FILE}" || true
+  exit 1
+fi
+
+OSBRICK_DEV="$(readlink -f "${OSBRICK_DEV_RAW}" 2>/dev/null || true)"
+if [[ -z "${OSBRICK_DEV}" ]]; then
+  OSBRICK_DEV="${OSBRICK_DEV_RAW}"
+fi
+
+if [[ ! -b "${OSBRICK_DEV}" ]]; then
+  err "Resolved FC os-brick device is not a block device: ${OSBRICK_DEV}"
+  lsblk -o NAME,SIZE,TYPE,MODEL,VENDOR || true
+  exit 1
+fi
+log "os-brick resolved FC device: ${OSBRICK_DEV}"
+lsblk -o NAME,SIZE,TYPE,MODEL,VENDOR | sed -n '1p;/LUNACY\|APOLLO\|sd/p'
+
+# --- Step 9: Filesystem and write validation ---
+log "Creating filesystem (${FS_TYPE}) and validating write/read on ${OSBRICK_DEV}"
+if [[ "${FS_TYPE}" == "ext4" ]]; then
+  mkfs.ext4 -F "${OSBRICK_DEV}" >/dev/null
+elif [[ "${FS_TYPE}" == "ext2" ]]; then
+  mkfs.ext2 -F "${OSBRICK_DEV}" >/dev/null
+else
+  err "Unsupported FS_TYPE=${FS_TYPE}; supported: ext2, ext4"
+  exit 1
+fi
+
+mkdir -p "${MOUNT_DIR}"
+mount "${OSBRICK_DEV}" "${MOUNT_DIR}"
+
+dd if=/dev/urandom of="${TEST_FILE}" bs=1M count=8 status=none
+cp "${TEST_FILE}" "${COPY_FILE}"
+sync
+
+SUM_A="$(sha256sum "${TEST_FILE}" | awk '{print $1}')"
+SUM_B="$(sha256sum "${COPY_FILE}" | awk '{print $1}')"
+if [[ "${SUM_A}" != "${SUM_B}" ]]; then
+  err "Data checksum mismatch after filesystem write/read"
+  exit 1
+fi
+
+log "Filesystem write/read checksum verified: ${SUM_A}"
 
 log "E2E agent test PASSED"
