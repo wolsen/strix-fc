@@ -1,0 +1,8 @@
+GNU GENERAL PUBLIC LICENSE
+Version 2, June 1991
+
+This repository includes Linux kernel modules licensed under GPL-2.0-only.
+Use, redistribution, and modification are governed by GPL version 2 only.
+
+For the complete license text, refer to the canonical GPL-2.0 license published by
+the Free Software Foundation.

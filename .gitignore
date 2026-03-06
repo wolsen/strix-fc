@@ -1,0 +1,19 @@
+.venv/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+
+# Kernel build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+Module.symvers
+modules.order
+*.cmd
+.*.cmd
