@@ -1,3 +1,4 @@
+/* SPDX-FileCopyrightText: 2026 Canonical, Ltd. */
 /* SPDX-License-Identifier: GPL-2.0-only */
 #ifndef APOLLO_FC_COMPAT_H
 #define APOLLO_FC_COMPAT_H
