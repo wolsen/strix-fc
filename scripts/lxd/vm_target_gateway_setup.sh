@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: 2026 Canonical, Ltd.
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Target VM setup: iSCSI target + Apollo Gateway
+# Target VM setup: iSCSI target + Strix Gateway
 #
 # This script runs INSIDE the target VM. It configures:
 # 1. An iSCSI target (via targetcli-fb) with a backing fileio LUN.
-# 2. Apollo Gateway (the control-plane REST API) on port 8080.
+# 2. Strix Gateway (the control-plane REST API) on port 8080.
 #
 # Environment variables (defaults shown):
 #   TARGET_IQN           iqn.2026-03.com.lunacy:apollo.fc.agent.test
@@ -20,13 +20,13 @@ ts() { date '+%Y-%m-%d %H:%M:%S'; }
 log() { echo "[$(ts)] [TARGET-GW][INFO] $*"; }
 err() { echo "[$(ts)] [TARGET-GW][ERROR] $*" >&2; }
 
-TARGET_IQN="${TARGET_IQN:-iqn.2026-03.com.lunacy:apollo.fc.agent.test}"
+TARGET_IQN="${TARGET_IQN:-iqn.2026-03.com.lunacy:strix.fc.agent.test}"
 TARGET_PORT="${TARGET_PORT:-3260}"
 ISCSI_LUN="${ISCSI_LUN:-1}"
 TARGET_LUN_SIZE_MB="${TARGET_LUN_SIZE_MB:-512}"
 GATEWAY_PORT="${GATEWAY_PORT:-8080}"
-BACKING_FILE="/var/lib/apollo-fc/target-lun.img"
-BACKSTORE_NAME="apollo_fc_lun"
+BACKING_FILE="/var/lib/strix-fc/target-lun.img"
+BACKSTORE_NAME="strix_fc_lun"
 SPDK_SOCK="/var/tmp/spdk.sock"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -34,14 +34,14 @@ export DEBIAN_FRONTEND=noninteractive
 # --- iSCSI target ---
 log "Installing dependencies"
 apt-get update
-apt-get install -y targetcli-fb python3 python3-pip python3-venv
+apt-get install -y targetcli-fb python3 python3-venv curl ca-certificates
 
 log "Loading target kernel modules"
 modprobe target_core_mod
 modprobe iscsi_target_mod
 
 log "Preparing backing image ${BACKING_FILE}"
-mkdir -p /var/lib/apollo-fc
+mkdir -p /var/lib/strix-fc
 truncate -s "${TARGET_LUN_SIZE_MB}M" "${BACKING_FILE}"
 
 log "Configuring iSCSI target via targetcli"
@@ -59,25 +59,30 @@ if ! ss -lnt | grep -q ":${TARGET_PORT} "; then
 fi
 log "iSCSI target ready: iqn=${TARGET_IQN} port=${TARGET_PORT}"
 
-# --- Apollo Gateway ---
-GATEWAY_ROOT="/root/apollo-gateway"
+# --- Strix Gateway ---
+GATEWAY_ROOT="/root/strix-gateway"
 if [[ ! -d "${GATEWAY_ROOT}" ]]; then
-  err "Apollo Gateway source not found at ${GATEWAY_ROOT}"
+  err "Strix Gateway source not found at ${GATEWAY_ROOT}"
   exit 1
 fi
 
-log "Installing Apollo Gateway"
+log "Installing Strix Gateway"
 cd "${GATEWAY_ROOT}"
 
 # Ensure schema is created fresh for this E2E run.
-rm -f apollo_gateway.db
+rm -f strix_gateway.db
 
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e .
+if ! command -v uv >/dev/null 2>&1; then
+  log "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
+uv venv --clear .venv
+uv pip install --python .venv/bin/python -e .
 
 log "Starting fake SPDK JSON-RPC socket at ${SPDK_SOCK}"
-cat > /usr/local/bin/apollo-fake-spdk.py <<'PY'
+cat > /usr/local/bin/strix-fake-spdk.py <<'PY'
 #!/usr/bin/env python3
 import json
 import os
@@ -333,14 +338,14 @@ def serve():
 if __name__ == "__main__":
   serve()
 PY
-chmod +x /usr/local/bin/apollo-fake-spdk.py
-nohup /usr/local/bin/apollo-fake-spdk.py > /var/log/apollo-fake-spdk.log 2>&1 &
+chmod +x /usr/local/bin/strix-fake-spdk.py
+nohup /usr/local/bin/strix-fake-spdk.py > /var/log/strix-fake-spdk.log 2>&1 &
 
-log "Starting Apollo Gateway on port ${GATEWAY_PORT} (background)"
-nohup .venv/bin/uvicorn apollo_gateway.main:app \
+log "Starting Strix Gateway on port ${GATEWAY_PORT} (background)"
+nohup .venv/bin/uvicorn strix_gateway.main:app \
   --host 0.0.0.0 --port "${GATEWAY_PORT}" \
   --log-level info \
-  > /var/log/apollo-gateway.log 2>&1 &
+  > /var/log/strix-gateway.log 2>&1 &
 GW_PID=$!
 
 # Wait for gateway to become ready
@@ -352,7 +357,7 @@ for i in $(seq 1 30); do
   fi
   if [[ $i -eq 30 ]]; then
     err "Gateway failed to start within 30s"
-    cat /var/log/apollo-gateway.log
+    cat /var/log/strix-gateway.log
     exit 1
   fi
   sleep 1

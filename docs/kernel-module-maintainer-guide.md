@@ -1,35 +1,35 @@
-# Apollo FC Kernel Module Maintainer Guide
+# Strix FC Kernel Module Maintainer Guide
 
 ## Scope
 
 This guide documents the internal behavior of:
 
-- `src/apollo_fc/apollo_fc.c`
-- `src/dm_apollo_fc/dm_apollo_fc.c`
+- `src/strix_fc/strix_fc.c`
+- `src/dm_strix_fc/dm_strix_fc.c`
 
 It is intended for maintainers extending FC emulation behavior while preserving
 compatibility with existing userspace tooling and OpenStack FC workflows.
 
 ## Module responsibilities
 
-## `apollo_fc`
+## `strix_fc`
 
 - creates one virtual FC initiator host (`Scsi_Host` + FC transport attrs)
 - manages remote target ports (`fc_rport`) created through Generic Netlink
 - maps exposed FC LUN identities to Linux backing block devices
 - services key SCSI commands from the midlayer and forwards read/write I/O
 
-## `dm_apollo_fc`
+## `dm_strix_fc`
 
-- provides a minimal device-mapper target named `apollo_fc`
+- provides a minimal device-mapper target named `strix_fc`
 - remaps bios to one configured backing block device
 
 ## Control plane summary
 
 Generic Netlink family:
 
-- family name: `apollo_fc`
-- version: `APOLLO_FC_GENL_VERSION`
+- family name: `strix_fc`
+- version: `STRIX_FC_GENL_VERSION`
 
 Primary commands:
 
@@ -45,9 +45,9 @@ Detailed wire schema is maintained in:
 
 ## Data model
 
-- host (`struct apollo_fc_host`) owns rports and lock
-- rport (`struct apollo_fc_rport`) owns LUN map list
-- lun-map (`struct apollo_fc_lun_map`) binds FC LUN identity to backing `dev_t`
+- host (`struct strix_fc_host`) owns rports and lock
+- rport (`struct strix_fc_rport`) owns LUN map list
+- lun-map (`struct strix_fc_lun_map`) binds FC LUN identity to backing `dev_t`
 
 The FC identity tuple exported to consumers is effectively:
 
@@ -114,4 +114,4 @@ text-oriented by design for human diagnostics and CI trace capture.
 Kernel APIs for block device open/close and DM callbacks change across kernel
 versions. Keep changes centralized and prefer compatibility wrappers in:
 
-- `include/apollo_fc_compat.h`
+- `include/strix_fc_compat.h`

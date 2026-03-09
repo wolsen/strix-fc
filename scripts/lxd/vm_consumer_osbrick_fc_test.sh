@@ -23,22 +23,22 @@ FC_TARGET_NODE_WWPN="${FC_TARGET_NODE_WWPN:-0x500a09c0ffe1bb01}"
 FC_LUN_ID="${FC_LUN_ID:-0}"
 FS_TYPE="${FS_TYPE:-ext4}"
 
-REPO_ROOT="/root/apollo-fc"
-MOUNT_DIR="/mnt/apollo-fc-test"
+REPO_ROOT="/root/strix-fc"
+MOUNT_DIR="/mnt/strix-fc-test"
 TEST_FILE="${MOUNT_DIR}/payload.bin"
 COPY_FILE="${MOUNT_DIR}/payload.copy"
-UDEV_RULE="/etc/udev/rules.d/99-apollo-fc.rules"
+UDEV_RULE="/etc/udev/rules.d/99-strix-fc.rules"
 VENV_DIR="${REPO_ROOT}/.venv"
-APOLLO_FCCTL="${VENV_DIR}/bin/apollo-fcctl"
+STRIX_FCCTL="${VENV_DIR}/bin/strix-fcctl"
 FCCTL_VERBOSE="${FCCTL_VERBOSE:-0}"
-FC_OSBRICK_CONN_FILE="/tmp/apollo_fc_fc_osbrick_connection.json"
-FC_OSBRICK_CONNECT_LOG="/tmp/apollo_fc_fc_osbrick_connect.log"
+FC_OSBRICK_CONN_FILE="/tmp/strix_fc_fc_osbrick_connection.json"
+FC_OSBRICK_CONNECT_LOG="/tmp/strix_fc_fc_osbrick_connect.log"
 
 fcctl() {
   if [[ "${FCCTL_VERBOSE}" == "1" ]]; then
-    "${APOLLO_FCCTL}" --verbose "$@"
+    "${STRIX_FCCTL}" --verbose "$@"
   else
-    "${APOLLO_FCCTL}" "$@"
+    "${STRIX_FCCTL}" "$@"
   fi
 }
 
@@ -64,7 +64,7 @@ from oslo_concurrency import lockutils
 
 lockutils.set_defaults('/tmp')
 
-with open('/tmp/apollo_fc_fc_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_fc_osbrick_connection.json', 'r', encoding='utf-8') as handle:
     payload = json.load(handle)
 
 conn = None
@@ -87,14 +87,14 @@ conn.disconnect_volume(payload['connection_properties'], payload['device_info'],
 PY
   fi
 
-  if [[ -x "${APOLLO_FCCTL}" ]]; then
+  if [[ -x "${STRIX_FCCTL}" ]]; then
     log "Cleanup: unmap/delete rport"
     timeout 15 fcctl unmap-lun --host "${HOST_ID:-0}" --target-wwpn "${FC_TARGET_WWPN}" --lun "${FC_LUN_ID}" >/dev/null 2>&1 || true
     timeout 15 fcctl delete-rport --host "${HOST_ID:-0}" --target-wwpn "${FC_TARGET_WWPN}" >/dev/null 2>&1 || true
   fi
 
   log "Cleanup: unload modules"
-  timeout 15 modprobe -r apollo_fc dm_apollo_fc >/dev/null 2>&1 || true
+  timeout 15 modprobe -r strix_fc dm_strix_fc >/dev/null 2>&1 || true
   log "Cleanup: iSCSI logout"
   timeout 20 iscsiadm -m node -T "${TARGET_IQN}" -p "${TARGET_IP}:${TARGET_PORT}" --logout >/dev/null 2>&1 || true
   log "Cleanup: complete"
@@ -113,26 +113,32 @@ apt-get install -y \
   open-iscsi \
   sudo \
   python3 \
-  python3-pip \
   python3-venv \
   python3-yaml \
-  udev
+  udev \
+  curl \
+  ca-certificates
+
+if ! command -v uv >/dev/null 2>&1; then
+  log "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
 
 cd "${REPO_ROOT}"
 log "Building kernel modules"
 make -j"$(nproc)"
 
-log "Creating Python virtualenv and installing apollo-fcctl + os-brick"
-python3 -m venv "${VENV_DIR}"
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install -e . os-brick
+log "Creating Python virtualenv and installing strix-fcctl + os-brick"
+uv venv --clear "${VENV_DIR}"
+uv pip install --python "${VENV_DIR}/bin/python" -e . os-brick
 ln -sf "${VENV_DIR}/bin/privsep-helper" /usr/local/bin/privsep-helper
 
 log "Loading kernel modules"
 modprobe dm_mod
 modprobe scsi_transport_fc
-modprobe dm_apollo_fc >/dev/null 2>&1 || insmod ./src/dm_apollo_fc/dm_apollo_fc.ko
-modprobe apollo_fc >/dev/null 2>&1 || insmod ./src/apollo_fc/apollo_fc.ko
+modprobe dm_strix_fc >/dev/null 2>&1 || insmod ./src/dm_strix_fc/dm_strix_fc.ko
+modprobe strix_fc >/dev/null 2>&1 || insmod ./src/strix_fc/strix_fc.ko
 
 log "Starting iSCSI initiator service"
 systemctl enable --now iscsid
@@ -184,8 +190,8 @@ for scsi_dev_path in /sys/class/scsi_device/${HOST_ID}:*; do
 done
 
 cat > "${UDEV_RULE}" <<'EOF'
-ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="apollo-fc/%E{ID_PATH}"
-ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="apollo-fc/%k"
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="strix-fc/%E{ID_PATH}"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="strix-fc/%k"
 EOF
 
 udevadm control --reload-rules
@@ -199,15 +205,15 @@ FC_BY_PATH_GLOB="/dev/disk/by-path/*-fc-${FC_TARGET_WWPN}-lun-${FC_LUN_ID}"
 log "Discovered FC by-path entries (/dev/disk/by-path/*fc-*)"
 ls -l /dev/disk/by-path/*fc-* 2>/dev/null || true
 
-log "Discovered Apollo FC entries (/dev/apollo-fc/*)"
-ls -l /dev/apollo-fc/* 2>/dev/null || true
+log "Discovered Strix FC entries (/dev/strix-fc/*)"
+ls -l /dev/strix-fc/* 2>/dev/null || true
 
 if ! ls /dev/disk/by-path/*fc-* >/dev/null 2>&1; then
-  FC_HINT_DEV="$(readlink -f /dev/apollo-fc/* 2>/dev/null | head -n1 || true)"
+  FC_HINT_DEV="$(readlink -f /dev/strix-fc/* 2>/dev/null | head -n1 || true)"
   FC_WWPN_HEX="${FC_TARGET_WWPN#0x}"
   if [[ -n "${FC_HINT_DEV}" ]]; then
-    ln -sf "../../$(basename "${FC_HINT_DEV}")" "/dev/disk/by-path/apollo-fc-0x${FC_WWPN_HEX}-lun-${FC_LUN_ID}" || true
-    ln -sf "../../$(basename "${FC_HINT_DEV}")" "/dev/disk/by-path/apollo-fc-${FC_WWPN_HEX}-lun-${FC_LUN_ID}" || true
+    ln -sf "../../$(basename "${FC_HINT_DEV}")" "/dev/disk/by-path/strix-fc-0x${FC_WWPN_HEX}-lun-${FC_LUN_ID}" || true
+    ln -sf "../../$(basename "${FC_HINT_DEV}")" "/dev/disk/by-path/strix-fc-${FC_WWPN_HEX}-lun-${FC_LUN_ID}" || true
     log "Synthesized FC by-path entries for os-brick discovery"
     ls -l /dev/disk/by-path/*fc-* 2>/dev/null || true
   fi
@@ -262,7 +268,7 @@ expected_host_paths = conn._get_possible_volume_paths(props, hbas)
 for host_path in expected_host_paths:
   print(f'expected_fc_host_path={host_path}')
 
-hint_paths = [os.path.realpath(p) for p in glob.glob('/dev/apollo-fc/*') if os.path.exists(p)]
+hint_paths = [os.path.realpath(p) for p in glob.glob('/dev/strix-fc/*') if os.path.exists(p)]
 hint_device = hint_paths[0] if hint_paths else None
 
 if hint_device:
@@ -316,7 +322,7 @@ payload = {
     'device_info': device_info,
     'resolved_path': path,
 }
-with open('/tmp/apollo_fc_fc_osbrick_connection.json', 'w', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_fc_osbrick_connection.json', 'w', encoding='utf-8') as handle:
     json.dump(payload, handle)
 
 print(path)
@@ -338,7 +344,7 @@ fi
 
 if ! FC_DEV_RAW="$("${VENV_DIR}/bin/python" - <<'PY'
 import json
-with open('/tmp/apollo_fc_fc_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_fc_osbrick_connection.json', 'r', encoding='utf-8') as handle:
     payload = json.load(handle)
 print(payload.get('resolved_path', ''))
 PY
@@ -408,4 +414,4 @@ if [[ "${SUM_A}" != "${SUM_B}" ]]; then
 fi
 
 echo "[$(ts)] [CONSUMER] backing_dev=${BACKING_DEV} fc_dev=${FC_DEV} checksum=${SUM_A}"
-echo "[$(ts)] [PASS] Apollo FC LXD os-brick FC consumer test passed"
+echo "[$(ts)] [PASS] Strix FC LXD os-brick FC consumer test passed"

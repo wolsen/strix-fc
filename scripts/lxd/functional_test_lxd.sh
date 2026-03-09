@@ -15,8 +15,8 @@ err() {
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-TARGET_VM="${TARGET_VM:-apollo-fc-target}"
-CONSUMER_VM="${CONSUMER_VM:-apollo-fc-consumer}"
+TARGET_VM="${TARGET_VM:-strix-fc-target}"
+CONSUMER_VM="${CONSUMER_VM:-strix-fc-consumer}"
 IMAGE="${LXD_IMAGE:-ubuntu:24.04}"
 KEEP_VMS="${KEEP_VMS:-0}"
 VM_MEMORY="${VM_MEMORY:-4GiB}"
@@ -125,10 +125,10 @@ if [[ -z "${TARGET_IP}" ]]; then
 fi
 
 log "Target VM IP: ${TARGET_IP}"
-log "Pushing apollo-fc repository into consumer VM"
+log "Pushing strix-fc repository into consumer VM"
 lxc file push -r "${REPO_ROOT}" "${CONSUMER_VM}/root/"
 
-lxc exec "${CONSUMER_VM}" -- chmod +x "/root/apollo-fc/scripts/lxd/${CONSUMER_TEST_SCRIPT}"
+lxc exec "${CONSUMER_VM}" -- chmod +x "/root/strix-fc/scripts/lxd/${CONSUMER_TEST_SCRIPT}"
 
 log "Running consumer VM functional validation"
 lxc exec "${CONSUMER_VM}" -- env \
@@ -139,6 +139,6 @@ lxc exec "${CONSUMER_VM}" -- env \
   FC_TARGET_WWPN="${FC_TARGET_WWPN}" \
   FC_TARGET_NODE_WWPN="${FC_TARGET_NODE_WWPN}" \
   FC_LUN_ID="${FC_LUN_ID}" \
-  "/root/apollo-fc/scripts/lxd/${CONSUMER_TEST_SCRIPT}"
+  "/root/strix-fc/scripts/lxd/${CONSUMER_TEST_SCRIPT}"
 
 echo "[$(ts)] [PASS] LXD functional test complete"

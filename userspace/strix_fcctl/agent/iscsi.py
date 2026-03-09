@@ -12,7 +12,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 
-logger = logging.getLogger("apollo_fc.agent.iscsi")
+logger = logging.getLogger("strix_fc.agent.iscsi")
 
 
 class IscsiError(Exception):

@@ -6,17 +6,17 @@ PWD := $(shell pwd)
 all: modules
 
 modules:
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/apollo_fc modules
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_apollo_fc modules
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/strix_fc modules
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_strix_fc modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/apollo_fc clean
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_apollo_fc clean
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/strix_fc clean
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_strix_fc clean
 	rm -rf build dist .pytest_cache userspace/*.egg-info
 
 modules_install:
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/apollo_fc modules_install
-	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_apollo_fc modules_install
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/strix_fc modules_install
+	$(MAKE) -C $(KDIR) M=$(PWD)/src/dm_strix_fc modules_install
 
 userspace-install:
 	python3 -m pip install -e .

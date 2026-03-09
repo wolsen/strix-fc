@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Canonical, Ltd.
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# E2E test: Apollo FC Agent ↔ Apollo Gateway
+# E2E test: Strix FC Agent ↔ Apollo Gateway
 #
 # Uses the existing functional_test_lxd.sh framework with:
 #   - vm_target_gateway_setup.sh  (target VM: iSCSI + gateway)
@@ -11,7 +11,7 @@
 # The Apollo Gateway source tree must be available alongside this repo.
 # Expected layout:
 #   parent/
-#     apollo-fc/       ← this repo
+#     strix-fc/       ← this repo
 #     apollo-gateway/  ← gateway repo
 #
 # Usage:
@@ -124,16 +124,16 @@ lxc exec "${CONSUMER_VM}" -- cloud-init status --wait
 
 # --- Push sources into VMs ---
 log "Packaging repositories (excluding .venv/.git/__pycache__)"
-FC_ARCHIVE="/tmp/apollo-fc-e2e.tgz"
+FC_ARCHIVE="/tmp/strix-fc-e2e.tgz"
 GW_ARCHIVE="/tmp/apollo-gateway-e2e.tgz"
 
 tar -C "$(dirname "${REPO_ROOT}")" \
-  --exclude='apollo-fc/.venv' \
-  --exclude='apollo-fc/.git' \
-  --exclude='apollo-fc/**/__pycache__' \
-  --exclude='apollo-fc/.pytest_cache' \
-  --exclude='apollo-fc/build' \
-  --exclude='apollo-fc/dist' \
+  --exclude='strix-fc/.venv' \
+  --exclude='strix-fc/.git' \
+  --exclude='strix-fc/**/__pycache__' \
+  --exclude='strix-fc/.pytest_cache' \
+  --exclude='strix-fc/build' \
+  --exclude='strix-fc/dist' \
   -czf "${FC_ARCHIVE}" "$(basename "${REPO_ROOT}")"
 
 tar -C "$(dirname "${GATEWAY_ROOT}")" \
@@ -145,16 +145,16 @@ tar -C "$(dirname "${GATEWAY_ROOT}")" \
   --exclude='apollo-gateway/dist' \
   -czf "${GW_ARCHIVE}" "$(basename "${GATEWAY_ROOT}")"
 
-log "Pushing apollo-fc archive into target + consumer VMs"
-lxc file push "${FC_ARCHIVE}" "${TARGET_VM}/root/apollo-fc-e2e.tgz"
-lxc file push "${FC_ARCHIVE}" "${CONSUMER_VM}/root/apollo-fc-e2e.tgz"
+log "Pushing strix-fc archive into target + consumer VMs"
+lxc file push "${FC_ARCHIVE}" "${TARGET_VM}/root/strix-fc-e2e.tgz"
+lxc file push "${FC_ARCHIVE}" "${CONSUMER_VM}/root/strix-fc-e2e.tgz"
 
 log "Pushing apollo-gateway archive into target VM"
 lxc file push "${GW_ARCHIVE}" "${TARGET_VM}/root/apollo-gateway-e2e.tgz"
 
 log "Extracting repositories inside VMs"
-lxc exec "${TARGET_VM}" -- bash -lc "cd /root && tar -xzf apollo-fc-e2e.tgz && tar -xzf apollo-gateway-e2e.tgz"
-lxc exec "${CONSUMER_VM}" -- bash -lc "cd /root && tar -xzf apollo-fc-e2e.tgz"
+lxc exec "${TARGET_VM}" -- bash -lc "cd /root && tar -xzf strix-fc-e2e.tgz && tar -xzf apollo-gateway-e2e.tgz"
+lxc exec "${CONSUMER_VM}" -- bash -lc "cd /root && tar -xzf strix-fc-e2e.tgz"
 
 rm -f "${FC_ARCHIVE}" "${GW_ARCHIVE}"
 

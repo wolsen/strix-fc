@@ -1,18 +1,18 @@
-# Apollo Fake Fibre Channel (`apollo-fc`)
+# Strix Fake Fibre Channel (`strix-fc`)
 
-`apollo-fc` provides an FC-shaped kernel topology for CI/development systems that do not have physical FC hardware, while forwarding I/O to normal Linux block devices.
+`strix-fc` provides an FC-shaped kernel topology for CI/development systems that do not have physical FC hardware, while forwarding I/O to normal Linux block devices.
 
 ## Components
 
-- `apollo_fc` kernel module:
+- `strix_fc` kernel module:
   - Virtual FC initiator host under `/sys/class/fc_host/hostX`
   - Multiple FC remote ports (`/sys/class/fc_remote_ports/*`)
-  - Generic Netlink family `apollo_fc` (version `1`)
+  - Generic Netlink family `strix_fc` (version `1`)
   - User-scan reconciliation (`/sys/class/scsi_host/hostX/scan`) for idempotent discovery
-- `dm_apollo_fc` device-mapper target:
-  - Target name: `apollo_fc`
+- `dm_strix_fc` device-mapper target:
+  - Target name: `strix_fc`
   - Pass-through I/O forwarding to backing block devices
-- `apollo-fcctl` Python CLI:
+- `strix-fcctl` Python CLI:
   - Netlink control (`create-rport`, `delete-rport`, `map-lun`, `unmap-lun`, `list`, `doctor`)
 
 ## Kernel / OS target
@@ -24,9 +24,9 @@
 ## Build
 
 ```bash
-cd apollo-fc
+cd strix-fc
 make
-python3 -m pip install -e .
+uv sync
 ```
 
 To build against a custom kernel tree:
@@ -39,8 +39,8 @@ make KDIR=/path/to/linux/build
 
 ```bash
 sudo modprobe dm_mod
-sudo insmod src/dm_apollo_fc/dm_apollo_fc.ko
-sudo insmod src/apollo_fc/apollo_fc.ko
+sudo insmod src/dm_strix_fc/dm_strix_fc.ko
+sudo insmod src/strix_fc/strix_fc.ko
 ```
 
 Verify host:
@@ -53,29 +53,29 @@ cat /sys/class/fc_host/host0/port_name
 ## CLI usage
 
 ```bash
-apollo-fcctl create-rport --host 0 --target-wwpn 0x500a09c0ffe10001
-apollo-fcctl create-rport --host 0 --target-wwpn 0x500a09c0ffe10002
+strix-fcctl create-rport --host 0 --target-wwpn 0x500a09c0ffe10001
+strix-fcctl create-rport --host 0 --target-wwpn 0x500a09c0ffe10002
 
-apollo-fcctl map-lun --host 0 --target-wwpn 0x500a09c0ffe10001 --lun 1 --backing /dev/loop0 --dm-name demo_lun1_a
-apollo-fcctl map-lun --host 0 --target-wwpn 0x500a09c0ffe10002 --lun 1 --backing /dev/loop0 --dm-name demo_lun1_b
+strix-fcctl map-lun --host 0 --target-wwpn 0x500a09c0ffe10001 --lun 1 --backing /dev/loop0 --dm-name demo_lun1_a
+strix-fcctl map-lun --host 0 --target-wwpn 0x500a09c0ffe10002 --lun 1 --backing /dev/loop0 --dm-name demo_lun1_b
 
 echo "- - -" | sudo tee /sys/class/scsi_host/host0/scan
 
 ls -l /dev/disk/by-path/*-fc-0x500a09c0ffe10001-lun-1
 ls -l /dev/disk/by-path/*-fc-0x500a09c0ffe10002-lun-1
 
-apollo-fcctl list --json
-apollo-fcctl doctor --json
+strix-fcctl list --json
+strix-fcctl doctor --json
 ```
 
 Cleanup:
 
 ```bash
-apollo-fcctl unmap-lun --host 0 --target-wwpn 0x500a09c0ffe10001 --lun 1
-apollo-fcctl unmap-lun --host 0 --target-wwpn 0x500a09c0ffe10002 --lun 1
-apollo-fcctl delete-rport --host 0 --target-wwpn 0x500a09c0ffe10001
-apollo-fcctl delete-rport --host 0 --target-wwpn 0x500a09c0ffe10002
-sudo modprobe -r apollo_fc dm_apollo_fc
+strix-fcctl unmap-lun --host 0 --target-wwpn 0x500a09c0ffe10001 --lun 1
+strix-fcctl unmap-lun --host 0 --target-wwpn 0x500a09c0ffe10002 --lun 1
+strix-fcctl delete-rport --host 0 --target-wwpn 0x500a09c0ffe10001
+strix-fcctl delete-rport --host 0 --target-wwpn 0x500a09c0ffe10002
+sudo modprobe -r strix_fc dm_strix_fc
 ```
 
 ## End-to-end CI script
@@ -97,12 +97,12 @@ chmod +x scripts/e2e_scan_test.sh
 sudo ./scripts/e2e_scan_test.sh /dev/loop0
 ```
 
-## LXD VM functional test (iSCSI target + Apollo FC consumer)
+## LXD VM functional test (iSCSI target + Strix FC consumer)
 
 This test creates two LXD VMs:
 
 - target VM: exports an iSCSI LUN with `targetcli`
-- consumer VM: builds/loads `apollo_fc`, logs into iSCSI, maps it as FC LUN,
+- consumer VM: builds/loads `strix_fc`, logs into iSCSI, maps it as FC LUN,
   validates udev links, formats/mounts filesystem, and verifies read/write
 
 Run from repository root:
@@ -130,11 +130,11 @@ CONSUMER_TEST_SCRIPT=vm_consumer_osbrick_fc_test.sh \
 ```
 
 For this FC os-brick variant, os-brick only handles FC device discovery/connect.
-iSCSI remains an internal backing transport behind Apollo FC mapping.
+iSCSI remains an internal backing transport behind Strix FC mapping.
 
 ## Generic Netlink contract
 
-- Family: `apollo_fc`
+- Family: `strix_fc`
 - Version: `1`
 - Commands:
   - `CREATE_RPORT {HOST_ID, TARGET_WWPN, TARGET_NODE_WWPN?}`
@@ -148,7 +148,7 @@ Detailed references:
 - `docs/netlink-wire-schema.md`
 - `docs/host-agent-behavior.md`
 - `docs/kernel-module-maintainer-guide.md`
-- `userspace/apollo_fcctl/agent_config.py` (Pydantic v2 config model)
+- `userspace/strix_fcctl/agent_config.py` (Pydantic v2 config model)
 
 ## Logging & safety
 

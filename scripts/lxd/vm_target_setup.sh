@@ -17,8 +17,8 @@ TARGET_IQN="${TARGET_IQN:-iqn.2026-03.com.lunacy:apollo.fc.test}"
 TARGET_PORT="${TARGET_PORT:-3260}"
 ISCSI_LUN="${ISCSI_LUN:-1}"
 TARGET_LUN_SIZE_MB="${TARGET_LUN_SIZE_MB:-512}"
-BACKING_FILE="/var/lib/apollo-fc/target-lun.img"
-BACKSTORE_NAME="apollo_fc_lun"
+BACKING_FILE="/var/lib/strix-fc/target-lun.img"
+BACKSTORE_NAME="strix_fc_lun"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -31,7 +31,7 @@ modprobe target_core_mod
 modprobe iscsi_target_mod
 
 log "Preparing backing image ${BACKING_FILE}"
-mkdir -p /var/lib/apollo-fc
+mkdir -p /var/lib/strix-fc
 truncate -s "${TARGET_LUN_SIZE_MB}M" "${BACKING_FILE}"
 
 log "Configuring targetcli objects"

@@ -9,17 +9,17 @@ from pydantic_settings import BaseSettings
 
 
 class AgentSettings(BaseSettings):
-    """Settings for the Apollo FC agent daemon.
+    """Settings for the Strix FC agent daemon.
 
     All values can be overridden via environment variables prefixed with
-    ``APOLLO_FC_AGENT_``.  For example::
+    ``STRIX_FC_AGENT_``.  For example::
 
-        APOLLO_FC_AGENT_GATEWAY_URL=http://192.168.1.10:8080
-        APOLLO_FC_AGENT_HOST_ID=b1a2c3d4-...
-        APOLLO_FC_AGENT_FC_HOST_NUM=0
+        STRIX_FC_AGENT_GATEWAY_URL=http://192.168.1.10:8080
+        STRIX_FC_AGENT_HOST_ID=b1a2c3d4-...
+        STRIX_FC_AGENT_FC_HOST_NUM=0
     """
 
-    model_config = {"env_prefix": "APOLLO_FC_AGENT_"}
+    model_config = {"env_prefix": "STRIX_FC_AGENT_"}
 
     # --- Gateway connection ---
     gateway_url: str = Field(
@@ -33,7 +33,7 @@ class AgentSettings(BaseSettings):
     # --- FC kernel module ---
     fc_host_num: NonNegativeInt = Field(
         default=0,
-        description="SCSI host number for the apollo_fc virtual HBA.",
+        description="SCSI host number for the strix_fc virtual HBA.",
     )
 
     # --- Polling ---

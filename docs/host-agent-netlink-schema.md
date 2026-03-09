@@ -1,4 +1,4 @@
-# Apollo FC Host-Agent Netlink/Event Contract
+# Strix FC Host-Agent Netlink/Event Contract
 
 > This document is retained for historical reference.
 > The maintained split specifications are:
@@ -7,13 +7,13 @@
 
 ## 1. Scope
 
-This document specifies the **exact Generic Netlink schema** and **host-side agent behavior** required to make `apollo-fc` transparent to Cinder/Nova/os-brick (no workflow changes in those services).
+This document specifies the **exact Generic Netlink schema** and **host-side agent behavior** required to make `strix-fc` transparent to Cinder/Nova/os-brick (no workflow changes in those services).
 
 The model is:
 
-- FC topology + SCSI scan semantics are emulated in kernel (`apollo_fc`)
+- FC topology + SCSI scan semantics are emulated in kernel (`strix_fc`)
 - iSCSI is used as underlay data path (or any block device underlay)
-- A host-local userspace daemon (`apollo-fcd`) reconciles missing mappings on demand
+- A host-local userspace daemon (`strix-fcd`) reconciles missing mappings on demand
 
 This is a protocol/behavior specification. It is intentionally strict so CI and operations can validate conformance.
 
@@ -23,7 +23,7 @@ This is a protocol/behavior specification. It is intentionally strict so CI and 
 
 ### 2.1 Family
 
-- Generic Netlink family name: `apollo_fc`
+- Generic Netlink family name: `strix_fc`
 
 ### 2.2 Versions
 
@@ -45,22 +45,22 @@ This is a protocol/behavior specification. It is intentionally strict so CI and 
 The following IDs are reserved and stable.
 
 ```text
-enum apollo_fc_cmd {
-  APOLLO_FC_CMD_UNSPEC         = 0,
-  APOLLO_FC_CMD_CREATE_RPORT   = 1,
-  APOLLO_FC_CMD_DELETE_RPORT   = 2,
-  APOLLO_FC_CMD_MAP_LUN        = 3,
-  APOLLO_FC_CMD_UNMAP_LUN      = 4,
-  APOLLO_FC_CMD_LIST_STATE     = 5,
+enum strix_fc_cmd {
+  STRIX_FC_CMD_UNSPEC         = 0,
+  STRIX_FC_CMD_CREATE_RPORT   = 1,
+  STRIX_FC_CMD_DELETE_RPORT   = 2,
+  STRIX_FC_CMD_MAP_LUN        = 3,
+  STRIX_FC_CMD_UNMAP_LUN      = 4,
+  STRIX_FC_CMD_LIST_STATE     = 5,
 
-  APOLLO_FC_CMD_SUBSCRIBE      = 6,   // optional explicit subscribe capability
-  APOLLO_FC_CMD_EVENT_ACK      = 7,   // userspace acknowledges processing of event_id
+  STRIX_FC_CMD_SUBSCRIBE      = 6,   // optional explicit subscribe capability
+  STRIX_FC_CMD_EVENT_ACK      = 7,   // userspace acknowledges processing of event_id
 
-  APOLLO_FC_CMD_EVENT_NEEDS_MAP    = 16,  // kernel -> userspace notification
-  APOLLO_FC_CMD_EVENT_MAP_APPLIED  = 17,  // kernel -> userspace notification
-  APOLLO_FC_CMD_EVENT_MAP_FAILED   = 18,  // kernel -> userspace notification
-  APOLLO_FC_CMD_EVENT_UNMAP_HINT   = 19,  // kernel -> userspace notification
-  APOLLO_FC_CMD_EVENT_RPORT_MISSING= 20   // kernel -> userspace notification
+  STRIX_FC_CMD_EVENT_NEEDS_MAP    = 16,  // kernel -> userspace notification
+  STRIX_FC_CMD_EVENT_MAP_APPLIED  = 17,  // kernel -> userspace notification
+  STRIX_FC_CMD_EVENT_MAP_FAILED   = 18,  // kernel -> userspace notification
+  STRIX_FC_CMD_EVENT_UNMAP_HINT   = 19,  // kernel -> userspace notification
+  STRIX_FC_CMD_EVENT_RPORT_MISSING= 20   // kernel -> userspace notification
 };
 ```
 
@@ -72,33 +72,33 @@ Notes:
 ## 3.2 Attribute IDs and Types
 
 ```text
-enum apollo_fc_attr {
-  APOLLO_FC_A_UNSPEC            = 0,
+enum strix_fc_attr {
+  STRIX_FC_A_UNSPEC            = 0,
 
-  APOLLO_FC_A_HOST_ID           = 1,   // NLA_U32
-  APOLLO_FC_A_TARGET_WWPN       = 2,   // NLA_U64 (hex semantics)
-  APOLLO_FC_A_TARGET_NODE_WWPN  = 3,   // NLA_U64
-  APOLLO_FC_A_LUN_ID            = 4,   // NLA_U64
-  APOLLO_FC_A_BACKING_MAJOR     = 5,   // NLA_U32
-  APOLLO_FC_A_BACKING_MINOR     = 6,   // NLA_U32
-  APOLLO_FC_A_DM_NAME           = 7,   // NLA_NUL_STRING (<=63)
-  APOLLO_FC_A_STATE_TEXT        = 8,   // NLA_NUL_STRING
+  STRIX_FC_A_HOST_ID           = 1,   // NLA_U32
+  STRIX_FC_A_TARGET_WWPN       = 2,   // NLA_U64 (hex semantics)
+  STRIX_FC_A_TARGET_NODE_WWPN  = 3,   // NLA_U64
+  STRIX_FC_A_LUN_ID            = 4,   // NLA_U64
+  STRIX_FC_A_BACKING_MAJOR     = 5,   // NLA_U32
+  STRIX_FC_A_BACKING_MINOR     = 6,   // NLA_U32
+  STRIX_FC_A_DM_NAME           = 7,   // NLA_NUL_STRING (<=63)
+  STRIX_FC_A_STATE_TEXT        = 8,   // NLA_NUL_STRING
 
-  APOLLO_FC_A_EVENT_ID          = 9,   // NLA_U64, unique per event message
-  APOLLO_FC_A_REQUEST_ID        = 10,  // NLA_U64, stable correlation key
-  APOLLO_FC_A_EVENT_TS_NS       = 11,  // NLA_U64, CLOCK_MONOTONIC ns
-  APOLLO_FC_A_STATUS_CODE       = 12,  // NLA_S32, kernel/userspace mapped errno
-  APOLLO_FC_A_STATUS_TEXT       = 13,  // NLA_NUL_STRING (<=255)
-  APOLLO_FC_A_RETRYABLE         = 14,  // NLA_U8 (0/1)
-  APOLLO_FC_A_SCAN_EPOCH        = 15,  // NLA_U64, monotonic per-host scan seq
-  APOLLO_FC_A_AGENT_ID          = 16,  // NLA_NUL_STRING (<=63)
-  APOLLO_FC_A_CONFIG_GEN        = 17,  // NLA_U64, agent config generation
-  APOLLO_FC_A_FLAGS             = 18,  // NLA_U32 bitset
+  STRIX_FC_A_EVENT_ID          = 9,   // NLA_U64, unique per event message
+  STRIX_FC_A_REQUEST_ID        = 10,  // NLA_U64, stable correlation key
+  STRIX_FC_A_EVENT_TS_NS       = 11,  // NLA_U64, CLOCK_MONOTONIC ns
+  STRIX_FC_A_STATUS_CODE       = 12,  // NLA_S32, kernel/userspace mapped errno
+  STRIX_FC_A_STATUS_TEXT       = 13,  // NLA_NUL_STRING (<=255)
+  STRIX_FC_A_RETRYABLE         = 14,  // NLA_U8 (0/1)
+  STRIX_FC_A_SCAN_EPOCH        = 15,  // NLA_U64, monotonic per-host scan seq
+  STRIX_FC_A_AGENT_ID          = 16,  // NLA_NUL_STRING (<=63)
+  STRIX_FC_A_CONFIG_GEN        = 17,  // NLA_U64, agent config generation
+  STRIX_FC_A_FLAGS             = 18,  // NLA_U32 bitset
 
-  APOLLO_FC_A_PORTAL            = 19,  // NLA_NUL_STRING (<=127), optional hint
-  APOLLO_FC_A_TARGET_IQN        = 20,  // NLA_NUL_STRING (<=223), optional hint
-  APOLLO_FC_A_ISCSI_LUN         = 21,  // NLA_U32, optional hint
-  APOLLO_FC_A_BACKING_PATH      = 22,  // NLA_NUL_STRING (<=255), optional ack detail
+  STRIX_FC_A_PORTAL            = 19,  // NLA_NUL_STRING (<=127), optional hint
+  STRIX_FC_A_TARGET_IQN        = 20,  // NLA_NUL_STRING (<=223), optional hint
+  STRIX_FC_A_ISCSI_LUN         = 21,  // NLA_U32, optional hint
+  STRIX_FC_A_BACKING_PATH      = 22,  // NLA_NUL_STRING (<=255), optional ack detail
 };
 ```
 
@@ -287,7 +287,7 @@ Agent maps failures to `STATUS_CODE` in `EVENT_ACK`:
 
 ---
 
-## 6. Host Agent (`apollo-fcd`) Behavior Contract
+## 6. Host Agent (`strix-fcd`) Behavior Contract
 
 ## 6.1 Process identity and privileges
 
@@ -314,7 +314,7 @@ Validation rules:
 
 ### Phase B: Kernel and family readiness
 
-- Verify `apollo_fc` family exists
+- Verify `strix_fc` family exists
 - Verify multicast group `events` exists
 - Optionally trigger module load if allowed by policy
 
@@ -392,7 +392,7 @@ Agent MUST guarantee:
 
 Suggested location:
 
-- `/etc/apollo-fc/agent.yaml`
+- `/etc/strix-fc/agent.yaml`
 
 Example schema:
 
@@ -485,10 +485,10 @@ Structured JSON per step with correlation fields:
 
 ## 8.3 Metrics (recommended)
 
-- `apollo_fc_map_requests_total{result=...}`
-- `apollo_fc_map_latency_ms`
-- `apollo_fc_iscsi_login_latency_ms`
-- `apollo_fc_event_queue_depth`
+- `strix_fc_map_requests_total{result=...}`
+- `strix_fc_map_latency_ms`
+- `strix_fc_iscsi_login_latency_ms`
+- `strix_fc_event_queue_depth`
 
 ---
 

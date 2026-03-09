@@ -23,20 +23,20 @@ FC_TARGET_NODE_WWPN="${FC_TARGET_NODE_WWPN:-0x500a09c0ffe1bb01}"
 FC_LUN_ID="${FC_LUN_ID:-0}"
 FS_TYPE="${FS_TYPE:-ext4}"
 
-REPO_ROOT="/root/apollo-fc"
-MOUNT_DIR="/mnt/apollo-fc-test"
+REPO_ROOT="/root/strix-fc"
+MOUNT_DIR="/mnt/strix-fc-test"
 TEST_FILE="${MOUNT_DIR}/payload.bin"
 COPY_FILE="${MOUNT_DIR}/payload.copy"
-UDEV_RULE="/etc/udev/rules.d/99-apollo-fc.rules"
+UDEV_RULE="/etc/udev/rules.d/99-strix-fc.rules"
 VENV_DIR="${REPO_ROOT}/.venv"
-APOLLO_FCCTL="${VENV_DIR}/bin/apollo-fcctl"
+STRIX_FCCTL="${VENV_DIR}/bin/strix-fcctl"
 FCCTL_VERBOSE="${FCCTL_VERBOSE:-0}"
 
 fcctl() {
   if [[ "${FCCTL_VERBOSE}" == "1" ]]; then
-    "${APOLLO_FCCTL}" --verbose "$@"
+    "${STRIX_FCCTL}" --verbose "$@"
   else
-    "${APOLLO_FCCTL}" "$@"
+    "${STRIX_FCCTL}" "$@"
   fi
 }
 
@@ -53,13 +53,13 @@ cleanup() {
     timeout 10 udevadm settle >/dev/null 2>&1 || true
   fi
 
-  if [[ -x "${APOLLO_FCCTL}" ]]; then
+  if [[ -x "${STRIX_FCCTL}" ]]; then
     log "Cleanup: unmap/delete rport"
     timeout 15 fcctl unmap-lun --host "${HOST_ID:-0}" --target-wwpn "${FC_TARGET_WWPN}" --lun "${FC_LUN_ID}" >/dev/null 2>&1 || true
     timeout 15 fcctl delete-rport --host "${HOST_ID:-0}" --target-wwpn "${FC_TARGET_WWPN}" >/dev/null 2>&1 || true
   fi
   log "Cleanup: unload modules"
-  timeout 15 modprobe -r apollo_fc dm_apollo_fc >/dev/null 2>&1 || true
+  timeout 15 modprobe -r strix_fc dm_strix_fc >/dev/null 2>&1 || true
   log "Cleanup: iSCSI logout"
   timeout 20 iscsiadm -m node -T "${TARGET_IQN}" -p "${TARGET_IP}:${TARGET_PORT}" --logout >/dev/null 2>&1 || true
   log "Cleanup: complete"
@@ -77,25 +77,31 @@ apt-get install -y \
   linux-headers-"$(uname -r)" \
   open-iscsi \
   python3 \
-  python3-pip \
   python3-venv \
   python3-yaml \
-  udev
+  udev \
+  curl \
+  ca-certificates
+
+if ! command -v uv >/dev/null 2>&1; then
+  log "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
 
 cd "${REPO_ROOT}"
 log "Building kernel modules"
 make -j"$(nproc)"
 
-log "Creating Python virtualenv and installing apollo-fcctl"
-python3 -m venv "${VENV_DIR}"
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install -e .
+log "Creating Python virtualenv and installing strix-fcctl"
+uv venv --clear "${VENV_DIR}"
+uv pip install --python "${VENV_DIR}/bin/python" -e .
 
 log "Loading kernel modules"
 modprobe dm_mod
 modprobe scsi_transport_fc
-insmod ./src/dm_apollo_fc/dm_apollo_fc.ko
-insmod ./src/apollo_fc/apollo_fc.ko
+insmod ./src/dm_strix_fc/dm_strix_fc.ko
+insmod ./src/strix_fc/strix_fc.ko
 
 log "Starting iSCSI initiator service"
 systemctl enable --now iscsid
@@ -147,8 +153,8 @@ for scsi_dev_path in /sys/class/scsi_device/${HOST_ID}:*; do
 done
 
 cat > "${UDEV_RULE}" <<'EOF'
-ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="apollo-fc/%E{ID_PATH}"
-ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="apollo-fc/%k"
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="strix-fc/%E{ID_PATH}"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="strix-fc/%k"
 EOF
 
 udevadm control --reload-rules
@@ -169,18 +175,18 @@ if timeout 30 bash -c "until ls ${FC_BY_PATH_GLOB} >/dev/null 2>&1; do sleep 0.5
 fi
 
 if [[ -z "${FC_DEV}" ]]; then
-  if timeout 30 bash -c "until ls /dev/apollo-fc/* >/dev/null 2>&1; do sleep 0.5; done"; then
+  if timeout 30 bash -c "until ls /dev/strix-fc/* >/dev/null 2>&1; do sleep 0.5; done"; then
     while IFS= read -r candidate; do
       FC_CANDIDATES+=("${candidate}")
-    done < <(readlink -f /dev/apollo-fc/* 2>/dev/null || true)
+    done < <(readlink -f /dev/strix-fc/* 2>/dev/null || true)
   fi
 fi
 
 log "Discovered FC by-path entries (/dev/disk/by-path/*fc-*)"
 ls -l /dev/disk/by-path/*fc-* 2>/dev/null || true
 
-log "Discovered Apollo FC entries (/dev/apollo-fc/*)"
-ls -l /dev/apollo-fc/* 2>/dev/null || true
+log "Discovered Strix FC entries (/dev/strix-fc/*)"
+ls -l /dev/strix-fc/* 2>/dev/null || true
 
 for candidate in "${FC_CANDIDATES[@]}"; do
   if [[ -b "${candidate}" ]] && [[ "$(blockdev --getsize64 "${candidate}")" -gt 0 ]]; then
@@ -190,9 +196,9 @@ for candidate in "${FC_CANDIDATES[@]}"; do
 done
 
 if [[ -z "${FC_DEV}" || ! -b "${FC_DEV}" ]]; then
-  err "Could not resolve FC block device from by-path or apollo-fc udev links"
+  err "Could not resolve FC block device from by-path or strix-fc udev links"
   ls -l /dev/disk/by-path || true
-  ls -l /dev/apollo-fc || true
+  ls -l /dev/strix-fc || true
   lsblk -o NAME,SIZE,TYPE,MODEL,VENDOR || true
   exit 1
 fi
@@ -238,4 +244,4 @@ if [[ "${SUM_A}" != "${SUM_B}" ]]; then
 fi
 
 echo "[$(ts)] [CONSUMER] backing_dev=${BACKING_DEV} fc_dev=${FC_DEV} checksum=${SUM_A}"
-echo "[$(ts)] [PASS] Apollo FC LXD consumer test passed"
+echo "[$(ts)] [PASS] Strix FC LXD consumer test passed"

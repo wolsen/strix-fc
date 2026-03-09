@@ -28,14 +28,14 @@ from typing import Any
 
 import httpx
 
-from apollo_fcctl.netlink import ApolloNetlinkClient
+from strix_fcctl.netlink import ApolloNetlinkClient
 
 from . import fc as fc_ops
 from . import iscsi as iscsi_ops
 from .config import AgentSettings
 from .models import Attachment, AttachmentsResponse
 
-logger = logging.getLogger("apollo_fc.agent.reconcile")
+logger = logging.getLogger("strix_fc.agent.reconcile")
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ def _attach_one(
             local.rport_wwpns.add(wwpn_int)
 
         # 4. Map the LUN
-        dm_name = f"apollo-fc-{att.attachment_id[:8]}"
+        dm_name = f"strix-fc-{att.attachment_id[:8]}"
         fc_ops.map_lun(
             nl, settings.fc_host_num, wwpn_int, lun_id,
             backing_dev, dm_name=dm_name,

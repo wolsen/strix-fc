@@ -1,8 +1,8 @@
-# Apollo FC Host Agent Behavior (Detailed)
+# Strix FC Host Agent Behavior (Detailed)
 
 ## 1. Scope
 
-This document defines the operational contract for the host-local agent (`apollo-fcd`) used to keep Cinder/Nova/os-brick workflows unchanged while Apollo FC emulates FC topology and scan behavior.
+This document defines the operational contract for the host-local agent (`strix-fcd`) used to keep Cinder/Nova/os-brick workflows unchanged while Strix FC emulates FC topology and scan behavior.
 
 Wire-level Generic Netlink IDs and payload types are defined in `netlink-wire-schema.md`.
 
@@ -30,7 +30,7 @@ Wire-level Generic Netlink IDs and payload types are defined in `netlink-wire-sc
 
 Agent must parse and validate config using Pydantic model contract in:
 
-- `userspace/apollo_fcctl/agent_config.py`
+- `userspace/strix_fcctl/agent_config.py`
 
 Mandatory startup checks:
 
@@ -44,7 +44,7 @@ If any fail: exit non-zero; do not enter degraded mode.
 
 ## 3.3 Startup phase B: kernel/protocol readiness
 
-- verify `apollo_fc` netlink family exists
+- verify `strix_fc` netlink family exists
 - verify event multicast group exists (for event-capable mode)
 - verify expected host exists (`host_id`)
 
@@ -129,11 +129,11 @@ Recommended cache windows:
 
 Canonical path:
 
-- `/etc/apollo-fc/agent.yaml`
+- `/etc/strix-fc/agent.yaml`
 
 Validation implementation:
 
-- Pydantic v2 model in `userspace/apollo_fcctl/agent_config.py`
+- Pydantic v2 model in `userspace/strix_fcctl/agent_config.py`
 
 Example:
 

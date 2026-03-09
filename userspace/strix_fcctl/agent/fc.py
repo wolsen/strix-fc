@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """FC kernel-module operations via Generic Netlink.
 
-Wraps :class:`apollo_fcctl.netlink.ApolloNetlinkClient` with
+Wraps :class:`strix_fcctl.netlink.ApolloNetlinkClient` with
 higher-level helpers that the reconcile loop calls.
 """
 
@@ -12,9 +12,9 @@ import logging
 import os
 from typing import Any
 
-from apollo_fcctl.netlink import ApolloNetlinkClient, ApolloNl
+from strix_fcctl.netlink import ApolloNetlinkClient, ApolloNl
 
-logger = logging.getLogger("apollo_fc.agent.fc")
+logger = logging.getLogger("strix_fc.agent.fc")
 
 
 def parse_wwpn_int(value: str) -> int:
@@ -118,9 +118,9 @@ def list_state(
 ) -> dict[str, Any]:
     """Query the kernel module state and return parsed dict.
 
-    Re-uses :func:`apollo_fcctl.cli.parse_state_text` for parsing.
+    Re-uses :func:`strix_fcctl.cli.parse_state_text` for parsing.
     """
-    from apollo_fcctl.cli import extract_state_text, parse_state_text
+    from strix_fcctl.cli import extract_state_text, parse_state_text
 
     p = ApolloNl()
     attrs: list[tuple[int, Any]] = []

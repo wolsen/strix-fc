@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 Canonical, Ltd. */
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Apollo Fake Fibre Channel core module
+ * Strix Fake Fibre Channel core module
  *
  * This module emulates an FC transport topology (host -> rports -> LUNs)
  * entirely in-kernel so userspace stacks that expect FC semantics can run on
@@ -39,40 +39,40 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_transport_fc.h>
 
-#include "apollo_fc_compat.h"
+#include "strix_fc_compat.h"
 
-/* Generic Netlink command identifiers for the apollo_fc control plane. */
-enum apollo_fc_cmd {
-	APOLLO_FC_CMD_UNSPEC,
-	APOLLO_FC_CMD_CREATE_RPORT,
-	APOLLO_FC_CMD_DELETE_RPORT,
-	APOLLO_FC_CMD_MAP_LUN,
-	APOLLO_FC_CMD_UNMAP_LUN,
-	APOLLO_FC_CMD_LIST_STATE,
-	__APOLLO_FC_CMD_MAX,
+/* Generic Netlink command identifiers for the strix_fc control plane. */
+enum strix_fc_cmd {
+	STRIX_FC_CMD_UNSPEC,
+	STRIX_FC_CMD_CREATE_RPORT,
+	STRIX_FC_CMD_DELETE_RPORT,
+	STRIX_FC_CMD_MAP_LUN,
+	STRIX_FC_CMD_UNMAP_LUN,
+	STRIX_FC_CMD_LIST_STATE,
+	__STRIX_FC_CMD_MAX,
 };
 
-#define APOLLO_FC_CMD_MAX (__APOLLO_FC_CMD_MAX - 1)
+#define STRIX_FC_CMD_MAX (__STRIX_FC_CMD_MAX - 1)
 
-/* Generic Netlink attributes accepted/emitted by apollo_fc commands. */
-enum apollo_fc_attr {
-	APOLLO_FC_A_UNSPEC,
-	APOLLO_FC_A_HOST_ID,
-	APOLLO_FC_A_TARGET_WWPN,
-	APOLLO_FC_A_TARGET_NODE_WWPN,
-	APOLLO_FC_A_LUN_ID,
-	APOLLO_FC_A_BACKING_MAJOR,
-	APOLLO_FC_A_BACKING_MINOR,
-	APOLLO_FC_A_DM_NAME,
-	APOLLO_FC_A_STATE_TEXT,
-	__APOLLO_FC_A_MAX,
+/* Generic Netlink attributes accepted/emitted by strix_fc commands. */
+enum strix_fc_attr {
+	STRIX_FC_A_UNSPEC,
+	STRIX_FC_A_HOST_ID,
+	STRIX_FC_A_TARGET_WWPN,
+	STRIX_FC_A_TARGET_NODE_WWPN,
+	STRIX_FC_A_LUN_ID,
+	STRIX_FC_A_BACKING_MAJOR,
+	STRIX_FC_A_BACKING_MINOR,
+	STRIX_FC_A_DM_NAME,
+	STRIX_FC_A_STATE_TEXT,
+	__STRIX_FC_A_MAX,
 };
 
-#define APOLLO_FC_A_MAX (__APOLLO_FC_A_MAX - 1)
+#define STRIX_FC_A_MAX (__STRIX_FC_A_MAX - 1)
 
-struct apollo_fc_lun_map {
+struct strix_fc_lun_map {
 /*
- * struct apollo_fc_lun_map - One exported FC LUN mapped to a backing block dev.
+ * struct strix_fc_lun_map - One exported FC LUN mapped to a backing block dev.
  * @lun_id: SCSI logical unit number exposed under an rport.
  * @devt: Backing block device major/minor.
  * @bdev_handle: Lifetime-managed block device open handle.
@@ -90,15 +90,15 @@ struct apollo_fc_lun_map {
 	refcount_t refs;
 };
 
-struct apollo_fc_rport {
+struct strix_fc_rport {
 /*
- * struct apollo_fc_rport - Emulated remote FC target port.
+ * struct strix_fc_rport - Emulated remote FC target port.
  * @target_wwpn: Target port WWPN.
  * @target_node_wwpn: Target node WWPN.
  * @channel: Exposed SCSI channel (currently fixed to 0).
  * @target_id: Stable SCSI target id allocated from host->next_target_id.
  * @fc_rport: Transport-class rport object owned by FC transport.
- * @luns: List of struct apollo_fc_lun_map entries.
+ * @luns: List of struct strix_fc_lun_map entries.
  */
 	struct list_head node;
 	u64 target_wwpn;
@@ -109,9 +109,9 @@ struct apollo_fc_rport {
 	struct list_head luns;
 };
 
-struct apollo_fc_host {
+struct strix_fc_host {
 /*
- * struct apollo_fc_host - Per-initiator-host state for Apollo FC.
+ * struct strix_fc_host - Per-initiator-host state for Strix FC.
  * @host_id: SCSI host number visible to userspace.
  * @shost: Backing Scsi_Host instance.
  * @lock: Protects mutable per-host topology state.
@@ -128,7 +128,7 @@ struct apollo_fc_host {
 
 static LIST_HEAD(apollo_hosts);
 static DEFINE_MUTEX(apollo_hosts_lock);
-static struct scsi_transport_template *apollo_fc_transport;
+static struct scsi_transport_template *strix_fc_transport;
 
 static u64 initiator_wwpn = 0x500a09c0ffe00001ULL;
 module_param(initiator_wwpn, ullong, 0644);
@@ -138,14 +138,14 @@ static u64 initiator_node_wwpn = 0x500a09c0ffe0aa01ULL;
 module_param(initiator_node_wwpn, ullong, 0644);
 MODULE_PARM_DESC(initiator_node_wwpn, "Initial host node_name WWPN");
 
-static struct apollo_fc_host *apollo_host_from_shost(struct Scsi_Host *shost)
+static struct strix_fc_host *apollo_host_from_shost(struct Scsi_Host *shost)
 {
-	return *(struct apollo_fc_host **)shost_priv(shost);
+	return *(struct strix_fc_host **)shost_priv(shost);
 }
 
-static struct apollo_fc_host *apollo_find_host_by_id(u32 host_id)
+static struct strix_fc_host *apollo_find_host_by_id(u32 host_id)
 {
-	struct apollo_fc_host *host;
+	struct strix_fc_host *host;
 
 	list_for_each_entry(host, &apollo_hosts, node) {
 		if (host->host_id == host_id)
@@ -155,10 +155,10 @@ static struct apollo_fc_host *apollo_find_host_by_id(u32 host_id)
 	return NULL;
 }
 
-static struct apollo_fc_rport *apollo_find_rport_by_wwpn(struct apollo_fc_host *host,
+static struct strix_fc_rport *apollo_find_rport_by_wwpn(struct strix_fc_host *host,
 			u64 target_wwpn)
 {
-	struct apollo_fc_rport *rport;
+	struct strix_fc_rport *rport;
 
 	list_for_each_entry(rport, &host->rports, node) {
 		if (rport->target_wwpn == target_wwpn)
@@ -168,10 +168,10 @@ static struct apollo_fc_rport *apollo_find_rport_by_wwpn(struct apollo_fc_host *
 	return NULL;
 }
 
-static struct apollo_fc_lun_map *apollo_find_lun_map(struct apollo_fc_rport *rport,
+static struct strix_fc_lun_map *apollo_find_lun_map(struct strix_fc_rport *rport,
 		u64 lun_id)
 {
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_lun_map *map;
 
 	list_for_each_entry(map, &rport->luns, node) {
 		if (map->lun_id == lun_id)
@@ -181,12 +181,12 @@ static struct apollo_fc_lun_map *apollo_find_lun_map(struct apollo_fc_rport *rpo
 	return NULL;
 }
 
-static void apollo_lun_map_get(struct apollo_fc_lun_map *map)
+static void apollo_lun_map_get(struct strix_fc_lun_map *map)
 {
 	refcount_inc(&map->refs);
 }
 
-static void apollo_lun_map_put(struct apollo_fc_lun_map *map)
+static void apollo_lun_map_put(struct strix_fc_lun_map *map)
 {
 	if (!refcount_dec_and_test(&map->refs))
 		return;
@@ -207,11 +207,11 @@ static bool apollo_lun_matches(u64 configured_lun, u64 scsi_lun)
 	return false;
 }
 
-static struct apollo_fc_lun_map *apollo_find_lun_map_by_scsi(struct apollo_fc_host *host,
+static struct strix_fc_lun_map *apollo_find_lun_map_by_scsi(struct strix_fc_host *host,
 		u32 channel, u32 target_id, u64 lun)
 {
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
 
 	list_for_each_entry(rport, &host->rports, node) {
 		if (rport->channel != channel || rport->target_id != target_id)
@@ -228,14 +228,14 @@ static struct apollo_fc_lun_map *apollo_find_lun_map_by_scsi(struct apollo_fc_ho
 
 static void apollo_scsi_complete(struct scsi_cmnd *scmd, int result);
 
-struct apollo_fc_io_ctx {
+struct strix_fc_io_ctx {
 	struct scsi_cmnd *scmd;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_lun_map *map;
 };
 
 static void apollo_scsi_bio_end_io(struct bio *bio)
 {
-	struct apollo_fc_io_ctx *ctx = bio->bi_private;
+	struct strix_fc_io_ctx *ctx = bio->bi_private;
 	int result;
 
 	result = (bio->bi_status == BLK_STS_OK) ? (DID_OK << 16) : (DID_ERROR << 16);
@@ -245,12 +245,12 @@ static void apollo_scsi_bio_end_io(struct bio *bio)
 	kfree(ctx);
 }
 
-static int apollo_scsi_submit_rw(struct apollo_fc_lun_map *map, struct scsi_cmnd *scmd,
+static int apollo_scsi_submit_rw(struct strix_fc_lun_map *map, struct scsi_cmnd *scmd,
 			u64 lba, u32 blocks, bool write, bool fua)
 {
 	struct scatterlist *sg;
 	struct bio *bio;
-	struct apollo_fc_io_ctx *ctx;
+	struct strix_fc_io_ctx *ctx;
 	unsigned int i;
 	blk_opf_t opf;
 
@@ -299,11 +299,11 @@ static int apollo_scsi_submit_rw(struct apollo_fc_lun_map *map, struct scsi_cmnd
  *
  * Returns 0 on success or a negative errno if payload copy fails.
  */
-static int apollo_scsi_emulate_report_luns(struct apollo_fc_host *host,
-		struct scsi_cmnd *scmd, struct apollo_fc_rport *rport)
+static int apollo_scsi_emulate_report_luns(struct strix_fc_host *host,
+		struct scsi_cmnd *scmd, struct strix_fc_rport *rport)
 {
 	u8 buf[512] = {0};
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_lun_map *map;
 	u32 count = 0;
 	u32 payload_len;
 	int copied;
@@ -320,7 +320,7 @@ static int apollo_scsi_emulate_report_luns(struct apollo_fc_host *host,
 	}
 
 	payload_len = count * 8;
-	apollo_fc_put_unaligned_be32(payload_len, buf);
+	strix_fc_put_unaligned_be32(payload_len, buf);
 
 	copied = sg_copy_from_buffer(scsi_sglist(scmd), scsi_sg_count(scmd),
 				     buf, min_t(u32, sizeof(buf), scsi_bufflen(scmd)));
@@ -351,9 +351,9 @@ static void apollo_scsi_complete(struct scsi_cmnd *scmd, int result)
  */
 static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 {
-	struct apollo_fc_host *host = apollo_host_from_shost(shost);
-	struct apollo_fc_lun_map *map = NULL;
-	struct apollo_fc_rport *rport = NULL;
+	struct strix_fc_host *host = apollo_host_from_shost(shost);
+	struct strix_fc_lun_map *map = NULL;
+	struct strix_fc_rport *rport = NULL;
 	u8 *cdb = scmd->cmnd;
 	u8 op = cdb[0];
 	int ret = 0;
@@ -363,7 +363,7 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 	u64 lba;
 	u32 blocks;
 	sector_t sectors;
-	struct apollo_fc_rport *iter;
+	struct strix_fc_rport *iter;
 	bool is_lun0;
 	bool map_ref_held = false;
 	bool completed_async = false;
@@ -436,10 +436,10 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 		if (sectors == 0)
 			sectors = 1;
 		if (sectors - 1 > U32_MAX)
-			apollo_fc_put_unaligned_be32(U32_MAX, cap10);
+			strix_fc_put_unaligned_be32(U32_MAX, cap10);
 		else
-			apollo_fc_put_unaligned_be32((u32)(sectors - 1), cap10);
-		apollo_fc_put_unaligned_be32(512, &cap10[4]);
+			strix_fc_put_unaligned_be32((u32)(sectors - 1), cap10);
+		strix_fc_put_unaligned_be32(512, &cap10[4]);
 		if (sg_copy_from_buffer(scsi_sglist(scmd), scsi_sg_count(scmd), cap10,
 					sizeof(cap10)) <= 0)
 			ret = -EIO;
@@ -456,8 +456,8 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 		sectors = bdev_nr_sectors(map->bdev);
 		if (sectors == 0)
 			sectors = 1;
-		apollo_fc_put_unaligned_be64((u64)(sectors - 1), cap16);
-		apollo_fc_put_unaligned_be32(512, &cap16[8]);
+		strix_fc_put_unaligned_be64((u64)(sectors - 1), cap16);
+		strix_fc_put_unaligned_be32(512, &cap16[8]);
 		if (sg_copy_from_buffer(scsi_sglist(scmd), scsi_sg_count(scmd), cap16,
 					sizeof(cap16)) <= 0)
 			ret = -EIO;
@@ -474,7 +474,7 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 			ret = -ENODEV;
 			break;
 		}
-		lba = apollo_fc_get_unaligned_be32(&cdb[2]);
+		lba = strix_fc_get_unaligned_be32(&cdb[2]);
 		blocks = ((u16)cdb[7] << 8) | cdb[8];
 		ret = apollo_scsi_submit_rw(map, scmd, lba, blocks ? blocks : 65536,
 					false, false);
@@ -488,7 +488,7 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 			ret = -ENODEV;
 			break;
 		}
-		lba = apollo_fc_get_unaligned_be32(&cdb[2]);
+		lba = strix_fc_get_unaligned_be32(&cdb[2]);
 		blocks = ((u16)cdb[7] << 8) | cdb[8];
 		ret = apollo_scsi_submit_rw(map, scmd, lba, blocks ? blocks : 65536,
 					true, !!(cdb[1] & 0x8));
@@ -502,8 +502,8 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 			ret = -ENODEV;
 			break;
 		}
-		lba = apollo_fc_get_unaligned_be64(&cdb[2]);
-		blocks = apollo_fc_get_unaligned_be32(&cdb[10]);
+		lba = strix_fc_get_unaligned_be64(&cdb[2]);
+		blocks = strix_fc_get_unaligned_be32(&cdb[10]);
 		ret = apollo_scsi_submit_rw(map, scmd, lba, blocks, false, false);
 		if (ret == 1) {
 			completed_async = true;
@@ -515,8 +515,8 @@ static int apollo_queuecommand(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 			ret = -ENODEV;
 			break;
 		}
-		lba = apollo_fc_get_unaligned_be64(&cdb[2]);
-		blocks = apollo_fc_get_unaligned_be32(&cdb[10]);
+		lba = strix_fc_get_unaligned_be64(&cdb[2]);
+		blocks = strix_fc_get_unaligned_be32(&cdb[10]);
 		ret = apollo_scsi_submit_rw(map, scmd, lba, blocks, true, !!(cdb[1] & 0x8));
 		if (ret == 1) {
 			completed_async = true;
@@ -545,8 +545,8 @@ complete:
 
 static int apollo_slave_configure(struct scsi_device *sdev)
 {
-	struct apollo_fc_host *host = apollo_host_from_shost(sdev->host);
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_host *host = apollo_host_from_shost(sdev->host);
+	struct strix_fc_lun_map *map;
 
 	if (!host)
 		return -ENODEV;
@@ -563,9 +563,9 @@ static int apollo_slave_configure(struct scsi_device *sdev)
 
 static void apollo_slave_destroy(struct scsi_device *sdev)
 {
-	struct apollo_fc_host *host = apollo_host_from_shost(sdev->host);
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_host *host = apollo_host_from_shost(sdev->host);
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
 
 	if (!host)
 		return;
@@ -582,8 +582,8 @@ static void apollo_slave_destroy(struct scsi_device *sdev)
 
 static struct scsi_host_template apollo_sht = {
 	.module = THIS_MODULE,
-	.name = "apollo_fc",
-	.proc_name = "apollo_fc",
+	.name = "strix_fc",
+	.proc_name = "strix_fc",
 	.queuecommand = apollo_queuecommand,
 	.slave_configure = apollo_slave_configure,
 	.slave_destroy = apollo_slave_destroy,
@@ -595,7 +595,7 @@ static struct scsi_host_template apollo_sht = {
 };
 
 /* Attributes exported by FC transport class into sysfs for host/rport objects. */
-static struct fc_function_template apollo_fc_function_template = {
+static struct fc_function_template strix_fc_function_template = {
 	.show_host_node_name = 1,
 	.show_host_port_name = 1,
 	.show_host_supported_classes = 1,
@@ -606,14 +606,14 @@ static struct fc_function_template apollo_fc_function_template = {
 };
 
 /* Input validation policy for Generic Netlink attributes. */
-static const struct nla_policy apollo_fc_genl_policy[APOLLO_FC_A_MAX + 1] = {
-	[APOLLO_FC_A_HOST_ID] = {.type = NLA_U32},
-	[APOLLO_FC_A_TARGET_WWPN] = {.type = NLA_U64},
-	[APOLLO_FC_A_TARGET_NODE_WWPN] = {.type = NLA_U64},
-	[APOLLO_FC_A_LUN_ID] = {.type = NLA_U64},
-	[APOLLO_FC_A_BACKING_MAJOR] = {.type = NLA_U32},
-	[APOLLO_FC_A_BACKING_MINOR] = {.type = NLA_U32},
-	[APOLLO_FC_A_DM_NAME] = {.type = NLA_NUL_STRING, .len = 63},
+static const struct nla_policy strix_fc_genl_policy[STRIX_FC_A_MAX + 1] = {
+	[STRIX_FC_A_HOST_ID] = {.type = NLA_U32},
+	[STRIX_FC_A_TARGET_WWPN] = {.type = NLA_U64},
+	[STRIX_FC_A_TARGET_NODE_WWPN] = {.type = NLA_U64},
+	[STRIX_FC_A_LUN_ID] = {.type = NLA_U64},
+	[STRIX_FC_A_BACKING_MAJOR] = {.type = NLA_U32},
+	[STRIX_FC_A_BACKING_MINOR] = {.type = NLA_U32},
+	[STRIX_FC_A_DM_NAME] = {.type = NLA_NUL_STRING, .len = 63},
 };
 
 /*
@@ -625,9 +625,9 @@ static int apollo_genl_reply_state(struct genl_info *info, u32 host_filter)
 {
 	struct sk_buff *skb;
 	void *hdr;
-	struct apollo_fc_host *host;
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_host *host;
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
 	char *buf;
 	int len = 0;
 
@@ -670,14 +670,14 @@ static int apollo_genl_reply_state(struct genl_info *info, u32 host_filter)
 		return -ENOMEM;
 	}
 
-	hdr = genlmsg_put_reply(skb, info, NULL, 0, APOLLO_FC_CMD_LIST_STATE);
+	hdr = genlmsg_put_reply(skb, info, NULL, 0, STRIX_FC_CMD_LIST_STATE);
 	if (!hdr) {
 		nlmsg_free(skb);
 		kfree(buf);
 		return -ENOMEM;
 	}
 
-	if (nla_put_string(skb, APOLLO_FC_A_STATE_TEXT, buf)) {
+	if (nla_put_string(skb, STRIX_FC_A_STATE_TEXT, buf)) {
 		nlmsg_free(skb);
 		kfree(buf);
 		return -EMSGSIZE;
@@ -690,20 +690,20 @@ static int apollo_genl_reply_state(struct genl_info *info, u32 host_filter)
 
 static int apollo_genl_create_rport(struct sk_buff *skb, struct genl_info *info)
 {
-	struct apollo_fc_host *host;
-	struct apollo_fc_rport *rport;
+	struct strix_fc_host *host;
+	struct strix_fc_rport *rport;
 	struct fc_rport_identifiers ids = {0};
 	u32 host_id;
 	u64 target_wwpn;
 	u64 target_node_wwpn;
 
-	if (!info->attrs[APOLLO_FC_A_HOST_ID] || !info->attrs[APOLLO_FC_A_TARGET_WWPN])
+	if (!info->attrs[STRIX_FC_A_HOST_ID] || !info->attrs[STRIX_FC_A_TARGET_WWPN])
 		return -EINVAL;
 
-	host_id = nla_get_u32(info->attrs[APOLLO_FC_A_HOST_ID]);
-	target_wwpn = nla_get_u64(info->attrs[APOLLO_FC_A_TARGET_WWPN]);
-	target_node_wwpn = info->attrs[APOLLO_FC_A_TARGET_NODE_WWPN] ?
-		nla_get_u64(info->attrs[APOLLO_FC_A_TARGET_NODE_WWPN]) : target_wwpn;
+	host_id = nla_get_u32(info->attrs[STRIX_FC_A_HOST_ID]);
+	target_wwpn = nla_get_u64(info->attrs[STRIX_FC_A_TARGET_WWPN]);
+	target_node_wwpn = info->attrs[STRIX_FC_A_TARGET_NODE_WWPN] ?
+		nla_get_u64(info->attrs[STRIX_FC_A_TARGET_NODE_WWPN]) : target_wwpn;
 
 	mutex_lock(&apollo_hosts_lock);
 	host = apollo_find_host_by_id(host_id);
@@ -749,7 +749,7 @@ static int apollo_genl_create_rport(struct sk_buff *skb, struct genl_info *info)
 	mutex_unlock(&host->lock);
 	mutex_unlock(&apollo_hosts_lock);
 
-	pr_info("apollo_fc: create_rport host=%u target=0x%016llx node=0x%016llx id=%u\n",
+	pr_info("strix_fc: create_rport host=%u target=0x%016llx node=0x%016llx id=%u\n",
 		host_id,
 		(unsigned long long)target_wwpn,
 		(unsigned long long)target_node_wwpn,
@@ -764,19 +764,19 @@ static int apollo_genl_create_rport(struct sk_buff *skb, struct genl_info *info)
  */
 static int apollo_genl_delete_rport(struct sk_buff *skb, struct genl_info *info)
 {
-	struct apollo_fc_host *host;
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
-	struct apollo_fc_lun_map *tmp;
+	struct strix_fc_host *host;
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
+	struct strix_fc_lun_map *tmp;
 	LIST_HEAD(detached_maps);
 	u32 host_id;
 	u64 target_wwpn;
 
-	if (!info->attrs[APOLLO_FC_A_HOST_ID] || !info->attrs[APOLLO_FC_A_TARGET_WWPN])
+	if (!info->attrs[STRIX_FC_A_HOST_ID] || !info->attrs[STRIX_FC_A_TARGET_WWPN])
 		return -EINVAL;
 
-	host_id = nla_get_u32(info->attrs[APOLLO_FC_A_HOST_ID]);
-	target_wwpn = nla_get_u64(info->attrs[APOLLO_FC_A_TARGET_WWPN]);
+	host_id = nla_get_u32(info->attrs[STRIX_FC_A_HOST_ID]);
+	target_wwpn = nla_get_u64(info->attrs[STRIX_FC_A_TARGET_WWPN]);
 
 	mutex_lock(&apollo_hosts_lock);
 	host = apollo_find_host_by_id(host_id);
@@ -813,7 +813,7 @@ static int apollo_genl_delete_rport(struct sk_buff *skb, struct genl_info *info)
 		apollo_lun_map_put(map);
 	}
 
-	pr_info("apollo_fc: delete_rport host=%u target=0x%016llx\n",
+	pr_info("strix_fc: delete_rport host=%u target=0x%016llx\n",
 		host_id, (unsigned long long)target_wwpn);
 	kfree(rport);
 	return 0;
@@ -821,29 +821,29 @@ static int apollo_genl_delete_rport(struct sk_buff *skb, struct genl_info *info)
 
 static int apollo_genl_map_lun(struct sk_buff *skb, struct genl_info *info)
 {
-	struct apollo_fc_host *host;
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_host *host;
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
 	u32 host_id, major, minor;
 	u64 target_wwpn, lun_id;
 	dev_t devt;
 	int ret;
 	const char *dm_name = NULL;
 
-	if (!info->attrs[APOLLO_FC_A_HOST_ID] ||
-	    !info->attrs[APOLLO_FC_A_TARGET_WWPN] ||
-	    !info->attrs[APOLLO_FC_A_LUN_ID] ||
-	    !info->attrs[APOLLO_FC_A_BACKING_MAJOR] ||
-	    !info->attrs[APOLLO_FC_A_BACKING_MINOR])
+	if (!info->attrs[STRIX_FC_A_HOST_ID] ||
+	    !info->attrs[STRIX_FC_A_TARGET_WWPN] ||
+	    !info->attrs[STRIX_FC_A_LUN_ID] ||
+	    !info->attrs[STRIX_FC_A_BACKING_MAJOR] ||
+	    !info->attrs[STRIX_FC_A_BACKING_MINOR])
 		return -EINVAL;
 
-	host_id = nla_get_u32(info->attrs[APOLLO_FC_A_HOST_ID]);
-	target_wwpn = nla_get_u64(info->attrs[APOLLO_FC_A_TARGET_WWPN]);
-	lun_id = nla_get_u64(info->attrs[APOLLO_FC_A_LUN_ID]);
-	major = nla_get_u32(info->attrs[APOLLO_FC_A_BACKING_MAJOR]);
-	minor = nla_get_u32(info->attrs[APOLLO_FC_A_BACKING_MINOR]);
-	if (info->attrs[APOLLO_FC_A_DM_NAME])
-		dm_name = nla_data(info->attrs[APOLLO_FC_A_DM_NAME]);
+	host_id = nla_get_u32(info->attrs[STRIX_FC_A_HOST_ID]);
+	target_wwpn = nla_get_u64(info->attrs[STRIX_FC_A_TARGET_WWPN]);
+	lun_id = nla_get_u64(info->attrs[STRIX_FC_A_LUN_ID]);
+	major = nla_get_u32(info->attrs[STRIX_FC_A_BACKING_MAJOR]);
+	minor = nla_get_u32(info->attrs[STRIX_FC_A_BACKING_MINOR]);
+	if (info->attrs[STRIX_FC_A_DM_NAME])
+		dm_name = nla_data(info->attrs[STRIX_FC_A_DM_NAME]);
 
 	devt = MKDEV(major, minor);
 
@@ -896,7 +896,7 @@ static int apollo_genl_map_lun(struct sk_buff *skb, struct genl_info *info)
 	mutex_unlock(&host->lock);
 	mutex_unlock(&apollo_hosts_lock);
 
-	pr_info("apollo_fc: map_lun host=%u target=0x%016llx lun=%llu backing=%u:%u\n",
+	pr_info("strix_fc: map_lun host=%u target=0x%016llx lun=%llu backing=%u:%u\n",
 		host_id,
 		(unsigned long long)target_wwpn,
 		(unsigned long long)lun_id,
@@ -915,22 +915,22 @@ static int apollo_genl_map_lun(struct sk_buff *skb, struct genl_info *info)
  */
 static int apollo_genl_unmap_lun(struct sk_buff *skb, struct genl_info *info)
 {
-	struct apollo_fc_host *host;
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_lun_map *map;
+	struct strix_fc_host *host;
+	struct strix_fc_rport *rport;
+	struct strix_fc_lun_map *map;
 	u32 host_id;
 	u64 target_wwpn;
 	u64 lun_id;
 	struct scsi_device *sdev = NULL;
 
-	if (!info->attrs[APOLLO_FC_A_HOST_ID] ||
-	    !info->attrs[APOLLO_FC_A_TARGET_WWPN] ||
-	    !info->attrs[APOLLO_FC_A_LUN_ID])
+	if (!info->attrs[STRIX_FC_A_HOST_ID] ||
+	    !info->attrs[STRIX_FC_A_TARGET_WWPN] ||
+	    !info->attrs[STRIX_FC_A_LUN_ID])
 		return -EINVAL;
 
-	host_id = nla_get_u32(info->attrs[APOLLO_FC_A_HOST_ID]);
-	target_wwpn = nla_get_u64(info->attrs[APOLLO_FC_A_TARGET_WWPN]);
-	lun_id = nla_get_u64(info->attrs[APOLLO_FC_A_LUN_ID]);
+	host_id = nla_get_u32(info->attrs[STRIX_FC_A_HOST_ID]);
+	target_wwpn = nla_get_u64(info->attrs[STRIX_FC_A_TARGET_WWPN]);
+	lun_id = nla_get_u64(info->attrs[STRIX_FC_A_LUN_ID]);
 
 	mutex_lock(&apollo_hosts_lock);
 	host = apollo_find_host_by_id(host_id);
@@ -964,7 +964,7 @@ static int apollo_genl_unmap_lun(struct sk_buff *skb, struct genl_info *info)
 		scsi_remove_device(sdev);
 	apollo_lun_map_put(map);
 
-	pr_info("apollo_fc: unmap_lun host=%u target=0x%016llx lun=%llu\n",
+	pr_info("strix_fc: unmap_lun host=%u target=0x%016llx lun=%llu\n",
 		host_id,
 		(unsigned long long)target_wwpn,
 		(unsigned long long)lun_id);
@@ -976,64 +976,64 @@ static int apollo_genl_list_state(struct sk_buff *skb, struct genl_info *info)
 {
 	u32 host_id = U32_MAX;
 
-	if (info->attrs[APOLLO_FC_A_HOST_ID])
-		host_id = nla_get_u32(info->attrs[APOLLO_FC_A_HOST_ID]);
+	if (info->attrs[STRIX_FC_A_HOST_ID])
+		host_id = nla_get_u32(info->attrs[STRIX_FC_A_HOST_ID]);
 
 	return apollo_genl_reply_state(info, host_id);
 }
 
-static const struct genl_ops apollo_fc_genl_ops[] = {
+static const struct genl_ops strix_fc_genl_ops[] = {
 	{
-		.cmd = APOLLO_FC_CMD_CREATE_RPORT,
+		.cmd = STRIX_FC_CMD_CREATE_RPORT,
 		.flags = GENL_ADMIN_PERM,
-		.policy = apollo_fc_genl_policy,
+		.policy = strix_fc_genl_policy,
 		.doit = apollo_genl_create_rport,
 	},
 	{
-		.cmd = APOLLO_FC_CMD_DELETE_RPORT,
+		.cmd = STRIX_FC_CMD_DELETE_RPORT,
 		.flags = GENL_ADMIN_PERM,
-		.policy = apollo_fc_genl_policy,
+		.policy = strix_fc_genl_policy,
 		.doit = apollo_genl_delete_rport,
 	},
 	{
-		.cmd = APOLLO_FC_CMD_MAP_LUN,
+		.cmd = STRIX_FC_CMD_MAP_LUN,
 		.flags = GENL_ADMIN_PERM,
-		.policy = apollo_fc_genl_policy,
+		.policy = strix_fc_genl_policy,
 		.doit = apollo_genl_map_lun,
 	},
 	{
-		.cmd = APOLLO_FC_CMD_UNMAP_LUN,
+		.cmd = STRIX_FC_CMD_UNMAP_LUN,
 		.flags = GENL_ADMIN_PERM,
-		.policy = apollo_fc_genl_policy,
+		.policy = strix_fc_genl_policy,
 		.doit = apollo_genl_unmap_lun,
 	},
 	{
-		.cmd = APOLLO_FC_CMD_LIST_STATE,
+		.cmd = STRIX_FC_CMD_LIST_STATE,
 		.flags = GENL_ADMIN_PERM,
-		.policy = apollo_fc_genl_policy,
+		.policy = strix_fc_genl_policy,
 		.doit = apollo_genl_list_state,
 	},
 };
 
 /* Generic Netlink family registration descriptor for userspace control. */
-static struct genl_family apollo_fc_genl_family = {
-	.name = APOLLO_FC_GENL_FAMILY_NAME,
-	.version = APOLLO_FC_GENL_VERSION,
-	.maxattr = APOLLO_FC_A_MAX,
+static struct genl_family strix_fc_genl_family = {
+	.name = STRIX_FC_GENL_FAMILY_NAME,
+	.version = STRIX_FC_GENL_VERSION,
+	.maxattr = STRIX_FC_A_MAX,
 	.module = THIS_MODULE,
-	.ops = apollo_fc_genl_ops,
-	.n_ops = ARRAY_SIZE(apollo_fc_genl_ops),
+	.ops = strix_fc_genl_ops,
+	.n_ops = ARRAY_SIZE(strix_fc_genl_ops),
 };
 
 /*
- * apollo_fc_create_host() - Allocate and register the virtual FC initiator.
+ * strix_fc_create_host() - Allocate and register the virtual FC initiator.
  *
  * Returns 0 on success or a negative errno on allocation/registration failure.
  */
-static int apollo_fc_create_host(void)
+static int strix_fc_create_host(void)
 {
 	struct Scsi_Host *shost;
-	struct apollo_fc_host *host;
+	struct strix_fc_host *host;
 	int ret;
 
 	host = kzalloc(sizeof(*host), GFP_KERNEL);
@@ -1044,14 +1044,14 @@ static int apollo_fc_create_host(void)
 	mutex_init(&host->lock);
 	host->next_target_id = 0;
 
-	shost = scsi_host_alloc(&apollo_sht, sizeof(struct apollo_fc_host *));
+	shost = scsi_host_alloc(&apollo_sht, sizeof(struct strix_fc_host *));
 	if (!shost) {
 		kfree(host);
 		return -ENOMEM;
 	}
 
-	*(struct apollo_fc_host **)shost_priv(shost) = host;
-	shost->transportt = apollo_fc_transport;
+	*(struct strix_fc_host **)shost_priv(shost) = host;
+	shost->transportt = strix_fc_transport;
 	shost->max_channel = 0;
 	shost->max_id = 4096;
 	shost->max_lun = 16384;
@@ -1077,21 +1077,21 @@ static int apollo_fc_create_host(void)
 	list_add_tail(&host->node, &apollo_hosts);
 	mutex_unlock(&apollo_hosts_lock);
 
-	pr_info("apollo_fc: host created host=%u initiator=0x%016llx node=0x%016llx\n",
+	pr_info("strix_fc: host created host=%u initiator=0x%016llx node=0x%016llx\n",
 		host->host_id,
 		(unsigned long long)initiator_wwpn,
 		(unsigned long long)initiator_node_wwpn);
 	return 0;
 }
 
-static void apollo_fc_destroy_hosts(void)
+static void strix_fc_destroy_hosts(void)
 {
-	struct apollo_fc_host *host;
-	struct apollo_fc_host *tmp;
-	struct apollo_fc_rport *rport;
-	struct apollo_fc_rport *rport_tmp;
-	struct apollo_fc_lun_map *map;
-	struct apollo_fc_lun_map *map_tmp;
+	struct strix_fc_host *host;
+	struct strix_fc_host *tmp;
+	struct strix_fc_rport *rport;
+	struct strix_fc_rport *rport_tmp;
+	struct strix_fc_lun_map *map;
+	struct strix_fc_lun_map *map_tmp;
 	LIST_HEAD(detached_maps);
 
 	mutex_lock(&apollo_hosts_lock);
@@ -1125,46 +1125,46 @@ static void apollo_fc_destroy_hosts(void)
 	mutex_unlock(&apollo_hosts_lock);
 }
 
-static int __init apollo_fc_init(void)
+static int __init strix_fc_init(void)
 {
 	int ret;
 
-	apollo_fc_transport = fc_attach_transport(&apollo_fc_function_template);
-	if (!apollo_fc_transport)
+	strix_fc_transport = fc_attach_transport(&strix_fc_function_template);
+	if (!strix_fc_transport)
 		return -ENOMEM;
 
-	ret = genl_register_family(&apollo_fc_genl_family);
+	ret = genl_register_family(&strix_fc_genl_family);
 	if (ret) {
-		fc_release_transport(apollo_fc_transport);
-		pr_err("apollo_fc: failed to register netlink family: %d\n", ret);
+		fc_release_transport(strix_fc_transport);
+		pr_err("strix_fc: failed to register netlink family: %d\n", ret);
 		return ret;
 	}
 
-	ret = apollo_fc_create_host();
+	ret = strix_fc_create_host();
 	if (ret) {
-		genl_unregister_family(&apollo_fc_genl_family);
-		fc_release_transport(apollo_fc_transport);
-		pr_err("apollo_fc: failed to create host: %d\n", ret);
+		genl_unregister_family(&strix_fc_genl_family);
+		fc_release_transport(strix_fc_transport);
+		pr_err("strix_fc: failed to create host: %d\n", ret);
 		return ret;
 	}
 
-	pr_info("apollo_fc: loaded family=%s version=%d\n",
-		APOLLO_FC_GENL_FAMILY_NAME, APOLLO_FC_GENL_VERSION);
+	pr_info("strix_fc: loaded family=%s version=%d\n",
+		STRIX_FC_GENL_FAMILY_NAME, STRIX_FC_GENL_VERSION);
 	return 0;
 }
 
-static void __exit apollo_fc_exit(void)
+static void __exit strix_fc_exit(void)
 {
-	apollo_fc_destroy_hosts();
-	genl_unregister_family(&apollo_fc_genl_family);
-	if (apollo_fc_transport)
-		fc_release_transport(apollo_fc_transport);
-	pr_info("apollo_fc: unloaded\n");
+	strix_fc_destroy_hosts();
+	genl_unregister_family(&strix_fc_genl_family);
+	if (strix_fc_transport)
+		fc_release_transport(strix_fc_transport);
+	pr_info("strix_fc: unloaded\n");
 }
 
-module_init(apollo_fc_init);
-module_exit(apollo_fc_exit);
+module_init(strix_fc_init);
+module_exit(strix_fc_exit);
 
-MODULE_DESCRIPTION("Apollo Fake Fibre Channel transport emulator");
+MODULE_DESCRIPTION("Strix Fake Fibre Channel transport emulator");
 MODULE_AUTHOR("Lunacy Systems");
 MODULE_LICENSE("GPL");

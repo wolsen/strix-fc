@@ -17,7 +17,7 @@ from typing import Any
 from .netlink import ApolloNetlinkClient, ApolloNl
 
 
-LOGGER = logging.getLogger("apollo-fcctl")
+LOGGER = logging.getLogger("strix-fcctl")
 
 
 def configure_logging(verbose: bool) -> None:
@@ -258,7 +258,7 @@ def cmd_doctor(args: argparse.Namespace, client: ApolloNetlinkClient) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="apollo-fcctl")
+    parser = argparse.ArgumentParser(prog="strix-fcctl")
     parser.add_argument("--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 

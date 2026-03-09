@@ -11,7 +11,7 @@ from pyroute2.netlink.generic import GenericNetlinkSocket
 
 @dataclass(frozen=True)
 class ApolloNl:
-    family: str = "apollo_fc"
+    family: str = "strix_fc"
     version: int = 1
 
     CMD_CREATE_RPORT: int = 1
@@ -32,27 +32,27 @@ class ApolloNl:
 
 class ApolloGenlMsg(genlmsg):
     nla_map = (
-        ("APOLLO_FC_A_UNSPEC", "none"),
-        ("APOLLO_FC_A_HOST_ID", "uint32"),
-        ("APOLLO_FC_A_TARGET_WWPN", "uint64"),
-        ("APOLLO_FC_A_TARGET_NODE_WWPN", "uint64"),
-        ("APOLLO_FC_A_LUN_ID", "uint64"),
-        ("APOLLO_FC_A_BACKING_MAJOR", "uint32"),
-        ("APOLLO_FC_A_BACKING_MINOR", "uint32"),
-        ("APOLLO_FC_A_DM_NAME", "asciiz"),
-        ("APOLLO_FC_A_STATE_TEXT", "asciiz"),
+        ("STRIX_FC_A_UNSPEC", "none"),
+        ("STRIX_FC_A_HOST_ID", "uint32"),
+        ("STRIX_FC_A_TARGET_WWPN", "uint64"),
+        ("STRIX_FC_A_TARGET_NODE_WWPN", "uint64"),
+        ("STRIX_FC_A_LUN_ID", "uint64"),
+        ("STRIX_FC_A_BACKING_MAJOR", "uint32"),
+        ("STRIX_FC_A_BACKING_MINOR", "uint32"),
+        ("STRIX_FC_A_DM_NAME", "asciiz"),
+        ("STRIX_FC_A_STATE_TEXT", "asciiz"),
     )
 
 
 ATTR_NAME_BY_ID = {
-    ApolloNl.A_HOST_ID: "APOLLO_FC_A_HOST_ID",
-    ApolloNl.A_TARGET_WWPN: "APOLLO_FC_A_TARGET_WWPN",
-    ApolloNl.A_TARGET_NODE_WWPN: "APOLLO_FC_A_TARGET_NODE_WWPN",
-    ApolloNl.A_LUN_ID: "APOLLO_FC_A_LUN_ID",
-    ApolloNl.A_BACKING_MAJOR: "APOLLO_FC_A_BACKING_MAJOR",
-    ApolloNl.A_BACKING_MINOR: "APOLLO_FC_A_BACKING_MINOR",
-    ApolloNl.A_DM_NAME: "APOLLO_FC_A_DM_NAME",
-    ApolloNl.A_STATE_TEXT: "APOLLO_FC_A_STATE_TEXT",
+    ApolloNl.A_HOST_ID: "STRIX_FC_A_HOST_ID",
+    ApolloNl.A_TARGET_WWPN: "STRIX_FC_A_TARGET_WWPN",
+    ApolloNl.A_TARGET_NODE_WWPN: "STRIX_FC_A_TARGET_NODE_WWPN",
+    ApolloNl.A_LUN_ID: "STRIX_FC_A_LUN_ID",
+    ApolloNl.A_BACKING_MAJOR: "STRIX_FC_A_BACKING_MAJOR",
+    ApolloNl.A_BACKING_MINOR: "STRIX_FC_A_BACKING_MINOR",
+    ApolloNl.A_DM_NAME: "STRIX_FC_A_DM_NAME",
+    ApolloNl.A_STATE_TEXT: "STRIX_FC_A_STATE_TEXT",
 }
 
 ATTR_ID_BY_NAME = {name: attr_id for attr_id, name in ATTR_NAME_BY_ID.items()}

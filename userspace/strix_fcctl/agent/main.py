@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Canonical, Ltd.
 # SPDX-License-Identifier: GPL-2.0-only
-"""Apollo FC Agent CLI entry point.
+"""Strix FC Agent CLI entry point.
 
 Commands
 --------
@@ -19,7 +19,7 @@ import sys
 
 from .config import AgentSettings
 
-logger = logging.getLogger("apollo_fc.agent")
+logger = logging.getLogger("strix_fc.agent")
 
 
 def configure_logging(verbose: bool) -> None:
@@ -57,7 +57,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     - If ``--scan`` is given, also queries the gateway and reports drift
     """
     import httpx
-    from apollo_fcctl.netlink import ApolloNetlinkClient
+    from strix_fcctl.netlink import ApolloNetlinkClient
 
     from . import fc as fc_ops
 
@@ -147,8 +147,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="apollo-fc-agent",
-        description="Apollo FC reconciliation agent",
+        prog="strix-fc-agent",
+        description="Strix FC reconciliation agent",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     sub = parser.add_subparsers(dest="command", required=True)

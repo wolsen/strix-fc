@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: 2026 Canonical, Ltd.
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Consumer VM test: Apollo FC Agent end-to-end validation
+# Consumer VM test: Strix FC Agent end-to-end validation
 #
 # This script runs INSIDE the consumer VM. It:
-# 1. Builds + loads the apollo_fc / dm_apollo_fc kernel modules.
-# 2. Installs apollo-fcctl + the agent.
+# 1. Builds + loads the strix_fc / dm_strix_fc kernel modules.
+# 2. Installs strix-fcctl + the agent.
 # 3. Registers this host with the gateway.
 # 4. Creates an FC mapping via the gateway API.
 # 5. Runs the agent for one reconcile cycle.
@@ -55,15 +55,15 @@ FC_TARGET_NODE_WWPN="${FC_TARGET_NODE_WWPN:-0x500a09c0ffe1bb01}"
 FC_LUN_ID="${FC_LUN_ID:-0}"
 FS_TYPE="${FS_TYPE:-ext4}"
 
-REPO_ROOT="/root/apollo-fc"
+REPO_ROOT="/root/strix-fc"
 VENV_DIR="${REPO_ROOT}/.venv"
 GATEWAY_URL="http://${TARGET_IP}:${GATEWAY_PORT}"
-MOUNT_DIR="/mnt/apollo-fc-agent-test"
+MOUNT_DIR="/mnt/strix-fc-agent-test"
 TEST_FILE="${MOUNT_DIR}/payload.bin"
 COPY_FILE="${MOUNT_DIR}/payload.copy"
-OSBRICK_CONN_FILE="/tmp/apollo_fc_agent_osbrick_connection.json"
-OSBRICK_CONNECT_LOG="/tmp/apollo_fc_agent_osbrick_connect.log"
-UDEV_RULE="/etc/udev/rules.d/99-apollo-fc.rules"
+OSBRICK_CONN_FILE="/tmp/strix_fc_agent_osbrick_connection.json"
+OSBRICK_CONNECT_LOG="/tmp/strix_fc_agent_osbrick_connect.log"
+UDEV_RULE="/etc/udev/rules.d/99-strix-fc.rules"
 
 cleanup() {
   set +e
@@ -79,7 +79,7 @@ from oslo_concurrency import lockutils
 
 lockutils.set_defaults('/tmp')
 
-with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
     payload = json.load(handle)
 
 conn = None
@@ -103,7 +103,7 @@ PY
   fi
 
   log "Cleanup: unload modules"
-  timeout 15 modprobe -r apollo_fc dm_apollo_fc >/dev/null 2>&1 || true
+  timeout 15 modprobe -r strix_fc dm_strix_fc >/dev/null 2>&1 || true
   log "Cleanup: iSCSI logout"
   timeout 20 iscsiadm -m node -T "${TARGET_IQN}" -p "${TARGET_IP}:${TARGET_PORT}" --logout >/dev/null 2>&1 || true
   log "Cleanup: complete"
@@ -119,40 +119,45 @@ apt-get install -y \
   linux-headers-"$(uname -r)" \
   open-iscsi \
   sudo \
-  python3 python3-pip python3-venv python3-yaml \
-  curl jq
+  python3 python3-venv python3-yaml \
+  curl ca-certificates jq
+
+if ! command -v uv >/dev/null 2>&1; then
+  log "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
 
 cd "${REPO_ROOT}"
 
 log "Building kernel modules"
 make -j"$(nproc)"
 
-log "Creating Python virtualenv and installing apollo-fcctl + agent"
-python3 -m venv "${VENV_DIR}"
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install -e . os-brick
+log "Creating Python virtualenv and installing strix-fcctl + agent"
+uv venv --clear "${VENV_DIR}"
+uv pip install --python "${VENV_DIR}/bin/python" -e . os-brick
 ln -sf "${VENV_DIR}/bin/privsep-helper" /usr/local/bin/privsep-helper
 
 log "Loading kernel modules"
 modprobe dm_mod
 modprobe scsi_transport_fc
-insmod ./src/dm_apollo_fc/dm_apollo_fc.ko
-insmod ./src/apollo_fc/apollo_fc.ko
+insmod ./src/dm_strix_fc/dm_strix_fc.ko
+insmod ./src/strix_fc/strix_fc.ko
 
-log "Detecting apollo_fc SCSI host number"
+log "Detecting strix_fc SCSI host number"
 FC_HOST_NUM="$(for h in /sys/class/scsi_host/host*; do
   [[ -f "${h}/proc_name" ]] || continue
-  if [[ "$(cat "${h}/proc_name")" == "apollo_fc" ]]; then
+  if [[ "$(cat "${h}/proc_name")" == "strix_fc" ]]; then
     echo "${h##*host}"
     break
   fi
 done)"
 if [[ -z "${FC_HOST_NUM}" ]]; then
-  err "Failed to detect apollo_fc host number"
+  err "Failed to detect strix_fc host number"
   ls -l /sys/class/scsi_host || true
   exit 1
 fi
-log "Detected apollo_fc host number: ${FC_HOST_NUM}"
+log "Detected strix_fc host number: ${FC_HOST_NUM}"
 
 log "Starting iSCSI initiator service"
 systemctl enable --now iscsid
@@ -239,18 +244,18 @@ log "Pre-reconcile SCSI disk count: ${PRE_SD_COUNT}"
 
 # --- Step 7: Run agent for one reconcile pass ---
 log "Running agent reconcile (one-shot via env vars)"
-export APOLLO_FC_AGENT_GATEWAY_URL="${GATEWAY_URL}"
-export APOLLO_FC_AGENT_HOST_ID="${HOST_ID}"
-export APOLLO_FC_AGENT_FC_HOST_NUM="${FC_HOST_NUM}"
-export APOLLO_FC_AGENT_POLL_INTERVAL_SEC=1
-export APOLLO_FC_AGENT_DISABLE_STATE_SCAN=true
+export STRIX_FC_AGENT_GATEWAY_URL="${GATEWAY_URL}"
+export STRIX_FC_AGENT_HOST_ID="${HOST_ID}"
+export STRIX_FC_AGENT_FC_HOST_NUM="${FC_HOST_NUM}"
+export STRIX_FC_AGENT_POLL_INTERVAL_SEC=1
+export STRIX_FC_AGENT_DISABLE_STATE_SCAN=true
 
 # Use a short Python script to do one reconcile cycle then exit
 "${VENV_DIR}/bin/python" -c "
 import httpx
-from apollo_fcctl.netlink import ApolloNetlinkClient
-from apollo_fcctl.agent.config import AgentSettings
-from apollo_fcctl.agent.reconcile import reconcile_once
+from strix_fcctl.netlink import ApolloNetlinkClient
+from strix_fcctl.agent.config import AgentSettings
+from strix_fcctl.agent.reconcile import reconcile_once
 
 settings = AgentSettings()
 nl = ApolloNetlinkClient()
@@ -284,8 +289,8 @@ log "New SCSI disk detected after reconcile"
 
 # --- Step 8.5: Verify os-brick discovery/connect for FC persona path ---
 cat > "${UDEV_RULE}" <<'EOF'
-ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="apollo-fc/%E{ID_PATH}"
-ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="apollo-fc/%k"
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_PATH}=="*fc-0x*-lun-*", SYMLINK+="strix-fc/%E{ID_PATH}"
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd*", ENV{DEVTYPE}=="disk", ATTRS{vendor}=="LUNACY*", ATTRS{model}=="APOLLO FC LUN*", SYMLINK+="strix-fc/%k"
 EOF
 
 udevadm control --reload-rules
@@ -295,8 +300,8 @@ udevadm settle
 log "Discovered FC by-path entries (/dev/disk/by-path/*fc-*)"
 ls -l /dev/disk/by-path/*fc-* 2>/dev/null || true
 
-log "Discovered Apollo FC entries (/dev/apollo-fc/*)"
-ls -l /dev/apollo-fc/* 2>/dev/null || true
+log "Discovered Strix FC entries (/dev/strix-fc/*)"
+ls -l /dev/strix-fc/* 2>/dev/null || true
 
 log "Running os-brick FC discovery/connect validation"
 if ! timeout 90 "${VENV_DIR}/bin/python" - <<'PY' >"${OSBRICK_CONNECT_LOG}" 2>&1; then
@@ -352,7 +357,7 @@ expected_host_paths = conn._get_possible_volume_paths(props, hbas)
 for host_path in expected_host_paths:
   print(f'expected_fc_host_path={host_path}')
 
-hint_paths = [os.path.realpath(p) for p in glob.glob('/dev/apollo-fc/*') if os.path.exists(p)]
+hint_paths = [os.path.realpath(p) for p in glob.glob('/dev/strix-fc/*') if os.path.exists(p)]
 hint_device = hint_paths[0] if hint_paths else None
 
 if hint_device:
@@ -411,7 +416,7 @@ payload = {
   'device_info': device_info,
   'resolved_path': path,
 }
-with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'w', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_agent_osbrick_connection.json', 'w', encoding='utf-8') as handle:
   json.dump(payload, handle)
 
 print(path)
@@ -433,7 +438,7 @@ fi
 
 OSBRICK_DEV_RAW="$(${VENV_DIR}/bin/python - <<'PY'
 import json
-with open('/tmp/apollo_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
+with open('/tmp/strix_fc_agent_osbrick_connection.json', 'r', encoding='utf-8') as handle:
   payload = json.load(handle)
 print(payload.get('resolved_path', ''))
 PY

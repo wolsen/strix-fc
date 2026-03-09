@@ -24,10 +24,10 @@ The system:
 
 This design uses:
 
-- A lightweight kernel module: `apollo_fc`
-- A device-mapper target: `dm-apollo-fc`
+- A lightweight kernel module: `strix_fc`
+- A device-mapper target: `dm-strix-fc`
 - A userspace control interface (Generic Netlink)
-- Orchestration helper: `apollo-fcctl` (userspace utility)
+- Orchestration helper: `strix-fcctl` (userspace utility)
 
 This provides a fake FC Fabric + Device-Mapper Forwarding.
 
@@ -62,7 +62,7 @@ The purpose of this project is to provide a kernel-visible FC topology and SCSI 
 | Linux SCSI midlayer (hosts, targets, luns)                  |
 | sd driver (block device nodes /dev/sdX)                     |
 +--------------------------------------------------------------+
-| dm-apollo-fc (device-mapper target)                         |
+| dm-strix-fc (device-mapper target)                         |
 +--------------------------------------------------------------+
 | Backing block device (iSCSI or NVMe-oF TCP)                 |
 +--------------------------------------------------------------+
@@ -93,12 +93,12 @@ Rationale:
 
 ### Repository Name
 
-- `apollo-fc`
+- `strix-fc`
 
 ### Relationship to Apollo Gateway
 
-- Apollo Gateway provides luns and remote connections that `apollo-fc` presents to the local node.
-  - userspace helper (`apollo-fcctl`) - (python preferred)
+- Apollo Gateway provides luns and remote connections that `strix-fc` presents to the local node.
+  - userspace helper (`strix-fcctl`) - (python preferred)
   - netlink protocol
 - No code sharing required beyond protocol definitions
 
@@ -106,7 +106,7 @@ Rationale:
 
 # 5. Components
 
-## 5.1 Kernel Module: apollo_fc
+## 5.1 Kernel Module: strix_fc
 
 Responsibilities:
 
@@ -133,7 +133,7 @@ Does NOT:
 
 ---
 
-## 5.2 Device Mapper Target: dm-apollo-fc
+## 5.2 Device Mapper Target: dm-strix-fc
 
 Responsibilities:
 
@@ -155,7 +155,7 @@ Apollo Gateway (or a helper utility) uses a **Generic Netlink** family to instru
 
 A CLI utility is required for development/testing:
 
-- `apollo-fcctl`
+- `strix-fcctl`
   - create/delete rports
   - map/unmap LUNs
   - query status
@@ -276,7 +276,7 @@ Internal kernel state:
 
 Each mapping must create or reconcile:
 
-- a DM device (dm-apollo-fc) for that mapping instance
+- a DM device (dm-strix-fc) for that mapping instance
 - a SCSI device (sdX) tied to the host/channel/target/lun
 
 ### Mapping Identity
@@ -319,7 +319,7 @@ On scan:
 1. Iterate configured rports for the host
 2. Iterate configured LUN mappings per rport
 3. For each mapping:
-   - Ensure dm-apollo-fc device exists and is active
+   - Ensure dm-strix-fc device exists and is active
    - Ensure SCSI device exists for (host, channel, target, lun)
    - If missing:
      - create it via SCSI midlayer APIs
@@ -340,7 +340,7 @@ This is intentionally tolerant because os-brick may write different scan formats
 The module must trigger uevents when:
 
 - A new SCSI device is created
-- A dm-apollo-fc device appears
+- A dm-strix-fc device appears
 - A mapping is removed
 
 Goal:
@@ -359,20 +359,20 @@ Note:
 
 # 8. Device Mapper Design
 
-## 8.1 dm-apollo-fc Target
+## 8.1 dm-strix-fc Target
 
-Target name: `apollo_fc`
+Target name: `strix_fc`
 
 Table syntax:
 
 ```
-apollo_fc <major>:<minor> [readonly]
+strix_fc <major>:<minor> [readonly]
 ```
 
 Example:
 
 ```
-0 2097152 apollo_fc 8:16
+0 2097152 strix_fc 8:16
 ```
 
 Where `8:16` is the backing block device.
@@ -391,7 +391,7 @@ Behavior:
 
 Because v1 includes multiple rports:
 
-- Multiple dm-apollo-fc devices may map to the same backing device, each representing a distinct FC path
+- Multiple dm-strix-fc devices may map to the same backing device, each representing a distinct FC path
 - This allows multipathd to consolidate paths if enabled in the environment
 
 v1 requirement is only that multiple paths are exposed; multipath orchestration is environment-dependent.
@@ -402,7 +402,7 @@ v1 requirement is only that multiple paths are exposed; multipath orchestration 
 
 ## 9.1 Netlink Family
 
-Family name: `apollo_fc`  
+Family name: `strix_fc`  
 Version: 1  
 
 ## 9.2 Commands (v1)
@@ -512,13 +512,13 @@ WWPN formatting:
 
 ## 11.1 Separate Project Deliverables
 
-Repository: `apollo-fc`
+Repository: `strix-fc`
 
 Deliverables:
 
-- Kernel module: `apollo_fc.ko`
-- Device-mapper target: `dm_apollo_fc.ko` (or compiled-in target if preferred)
-- Userspace utility: `apollo-fcctl`
+- Kernel module: `strix_fc.ko`
+- Device-mapper target: `dm_strix_fc.ko` (or compiled-in target if preferred)
+- Userspace utility: `strix-fcctl`
 - Packaging for Ubuntu:
   - DKMS packaging recommended for developer flow
   - Optional: signed module strategy for secure boot environments (not required for CI)
@@ -540,7 +540,7 @@ To remain adaptable:
 - Isolate version-dependent code into a small compatibility layer:
 
 ```
-apollo_fc_compat.h
+strix_fc_compat.h
 ```
 
 - Gate kernel differences with `LINUX_VERSION_CODE`
@@ -631,9 +631,9 @@ Mitigation:
 
 # 16. Deliverables Checklist (v1)
 
-- [ ] `apollo_fc` kernel module
-- [ ] `dm-apollo-fc` DM target
-- [ ] `apollo-fcctl` userspace tool
+- [ ] `strix_fc` kernel module
+- [ ] `dm-strix-fc` DM target
+- [ ] `strix-fcctl` userspace tool
 - [ ] Netlink protocol spec and implementation
 - [ ] CI: topology + scan + os-brick compatibility tests
 - [ ] Documentation: install, usage, troubleshooting
