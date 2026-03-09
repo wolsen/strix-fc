@@ -2,6 +2,13 @@
 
 `strix-fc` provides an FC-shaped kernel topology for CI/development systems that do not have physical FC hardware, while forwarding I/O to normal Linux block devices.
 
+## Important limitations
+
+- Not intended for production workloads.
+- Intended for CI, integration tests, and development environments.
+- The kernel modules are built out-of-tree on the local host kernel.
+- Secure Boot module signing is not implemented in this project version.
+
 ## Components
 
 - `strix_fc` kernel module:
@@ -21,6 +28,14 @@
 - Out-of-tree build using exported kernel APIs
 - Secure Boot signing is not implemented in v1
 
+### Secure Boot requirement
+
+Because `strix_fc.ko` and `dm_strix_fc.ko` are built dynamically on the host and
+not signed by a trusted key enrolled in UEFI DB/MOK, Secure Boot enabled
+systems will typically refuse to load them.
+
+For development and CI usage, disable Secure Boot before loading these modules.
+
 ## Build
 
 ```bash
@@ -34,6 +49,17 @@ To build against a custom kernel tree:
 ```bash
 make KDIR=/path/to/linux/build
 ```
+
+## Typical usage flow
+
+1. Build userspace + kernel artifacts.
+2. Load `dm_strix_fc` and `strix_fc` modules.
+3. Start `strix-fc-agent` on the host.
+4. Agent polls Strix Gateway for desired attachments.
+5. Agent logs into iSCSI underlay and maps each attachment to an emulated FC
+   LUN via netlink.
+6. Trigger scan (`/sys/class/scsi_host/hostX/scan`) and consume resulting FC
+   by-path block devices.
 
 ## Load modules
 
@@ -66,6 +92,53 @@ ls -l /dev/disk/by-path/*-fc-0x500a09c0ffe10002-lun-1
 
 strix-fcctl list --json
 strix-fcctl doctor --json
+```
+
+## Host agent (`strix-fc-agent`)
+
+The agent is the bridge between desired state from Strix Gateway and local
+kernel mapping state.
+
+### What the agent does
+
+Per reconcile cycle, the agent:
+
+1. Polls `GET /v1/hosts/{host_id}/attachments` on the gateway.
+2. Filters desired FC attachments.
+3. For each desired attachment:
+  - Extracts FC persona fields (`target_wwpns`, `lun_id`).
+  - Extracts iSCSI underlay fields (`portal`, `target_iqn`, `target_lun`).
+  - Ensures iSCSI discovery/login (`iscsiadm`) is active.
+  - Finds the local iSCSI block device (for example `/dev/sdX`).
+  - Ensures FC rport exists for each target WWPN.
+  - Calls netlink `MAP_LUN` to map FC LUN to that local backing device.
+4. Unmaps stale LUNs and logs out stale iSCSI sessions.
+
+Result: os-brick and normal FC scan flows see FC-shaped devices while the real
+transport is iSCSI underlay on the same host.
+
+### Run the agent
+
+`strix-fc-agent` is installed from the Python package (`uv sync`).
+
+```bash
+# Required identity/config
+export STRIX_FC_AGENT_GATEWAY_URL=http://127.0.0.1:8080
+export STRIX_FC_AGENT_HOST_ID=<gateway-host-uuid>
+
+# Optional tuning
+export STRIX_FC_AGENT_FC_HOST_NUM=0
+export STRIX_FC_AGENT_POLL_INTERVAL_SEC=5
+export STRIX_FC_AGENT_ISCSI_LOGIN_TIMEOUT_SEC=30
+
+# Start daemon loop
+strix-fc-agent run
+```
+
+One-shot health/drift check:
+
+```bash
+strix-fc-agent doctor --scan --json
 ```
 
 Cleanup:
@@ -131,6 +204,13 @@ CONSUMER_TEST_SCRIPT=vm_consumer_osbrick_fc_test.sh \
 
 For this FC os-brick variant, os-brick only handles FC device discovery/connect.
 iSCSI remains an internal backing transport behind Strix FC mapping.
+
+## Production suitability
+
+`strix-fc` is a functional compatibility layer for testing workflows that expect
+FC topology semantics. It is not a production storage data path and does not
+provide production hardening features (for example Secure Boot module signing,
+vendor support matrix, or operational SLAs).
 
 ## Generic Netlink contract
 
