@@ -13,6 +13,10 @@ err() {
   echo "[$(ts)] [ERROR] $*" >&2
 }
 
+warn() {
+  echo "[$(ts)] [WARN] $*" >&2
+}
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 TARGET_VM="${TARGET_VM:-strix-fc-target}"
@@ -86,15 +90,37 @@ wait_for_vm_agent() {
   done
 }
 
+lxc_launch_vm_secureboot_disabled() {
+  local image="$1"
+  local vm_name="$2"
+  local memory="$3"
+  local cpus="$4"
+
+  if lxc launch "${image}" "${vm_name}" --vm \
+    -c boot.mode=uefi-nosecureboot \
+    -c limits.memory="${memory}" \
+    -c limits.cpu="${cpus}"; then
+    return 0
+  fi
+
+  warn "Failed with boot.mode=uefi-nosecureboot; retrying with security.secureboot=false"
+  if lxc launch "${image}" "${vm_name}" --vm \
+    -c security.secureboot=false \
+    -c limits.memory="${memory}" \
+    -c limits.cpu="${cpus}"; then
+    return 0
+  fi
+
+  warn "Failed with security.secureboot=false; retrying with raw.qemu fallback"
+  lxc launch "${image}" "${vm_name}" --vm \
+    -c raw.qemu="-machine q35,smm=off" \
+    -c limits.memory="${memory}" \
+    -c limits.cpu="${cpus}"
+}
+
 log "Launching VMs (${TARGET_VM}, ${CONSUMER_VM}) from ${IMAGE}"
-lxc launch "${IMAGE}" "${TARGET_VM}" --vm \
-  -c security.secureboot=false \
-  -c limits.memory="${VM_MEMORY}" \
-  -c limits.cpu="${VM_CPUS}"
-lxc launch "${IMAGE}" "${CONSUMER_VM}" --vm \
-  -c security.secureboot=false \
-  -c limits.memory="${VM_MEMORY}" \
-  -c limits.cpu="${VM_CPUS}"
+lxc_launch_vm_secureboot_disabled "${IMAGE}" "${TARGET_VM}" "${VM_MEMORY}" "${VM_CPUS}"
+lxc_launch_vm_secureboot_disabled "${IMAGE}" "${CONSUMER_VM}" "${VM_MEMORY}" "${VM_CPUS}"
 
 log "Waiting for VM agents"
 wait_for_vm_agent "${TARGET_VM}"
